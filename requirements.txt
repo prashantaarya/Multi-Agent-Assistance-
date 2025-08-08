@@ -1,0 +1,21 @@
+# Core AutoGen v0.4 dependencies
+autogen-agentchat>=0.4.0
+autogen-core>=0.4.0
+autogen-ext[openai]>=0.4.0
+
+# FastAPI and server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# Environment and utilities
+python-dotenv>=1.0.0
+asyncio-throttle>=1.0.0
+
+# Optional: Enhanced features
+httpx>=0.25.0
+aiofiles>=23.0.0
+
+# Development (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
