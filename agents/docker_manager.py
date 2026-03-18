@@ -1,31 +1,70 @@
 # agents/docker_manager.py
-import docker
-from docker.errors import ContainerError, APIError
+import os
 import uuid
 import shutil
-import os
+import tempfile
+
+try:
+    import docker
+    from docker.errors import ContainerError, APIError, DockerException
+except Exception:
+    docker = None
+    DockerException = Exception
+    ContainerError = Exception
+    APIError = Exception
+
 
 class DockerManager:
-    def __init__(self):
-        self.client = docker.from_env()
+    """
+    Lazy-initialized Docker client. If Docker is not available or disabled,
+    run_code() raises a clear exception that ToolAgent can translate to a user-friendly message.
+    """
 
-    def run_code(self, code: str, timeout: int = 30):
-        """Run the given Python code in a fresh container."""
+    def __init__(self):
+        self._client = None
+        self._disabled = os.getenv("DISABLE_DOCKER", "0") == "1"
+
+    def _ensure_client(self):
+        if self._disabled:
+            raise DockerException("Docker is disabled via DISABLE_DOCKER=1")
+
+        if docker is None:
+            raise DockerException("python 'docker' package not installed")
+
+        if self._client is None:
+            # Will raise if Docker Desktop is not running / pipe not available
+            self._client = docker.from_env()
+            # Touch the daemon to confirm connectivity
+            _ = self._client.version()
+
+        return self._client
+
+    def run_code(self, code: str, timeout: int = 30) -> str:
+        client = self._ensure_client()
+
         image = "python:3.11-slim"
         container_name = f"code_runner_{uuid.uuid4().hex[:8]}"
-        workdir = f"/tmp/{container_name}"
-        os.makedirs(workdir, exist_ok=True)
 
+        # use a temp dir that we can always clean
+        workdir = tempfile.mkdtemp(prefix=container_name + "_")
         script_path = os.path.join(workdir, "script.py")
-        with open(script_path, "w") as f:
+
+        with open(script_path, "w", encoding="utf-8") as f:
             f.write(code)
 
         try:
-            result = self.client.containers.run(
+            # Pull once if needed
+            try:
+                client.images.pull(image)
+            except Exception:
+                # ignore pull errors; may already exist or policy blocked
+                pass
+
+            result = client.containers.run(
                 image=image,
                 name=container_name,
                 command=["python", "script.py"],
-                volumes={ workdir: {"bind": "/workspace", "mode": "ro"} },
+                volumes={workdir: {"bind": "/workspace", "mode": "ro"}},
                 working_dir="/workspace",
                 detach=False,
                 remove=True,
@@ -33,20 +72,20 @@ class DockerManager:
                 stdout=True,
                 mem_limit="256m",
                 nano_cpus=500_000_000,
-                network_mode="bridge",  # or just remove network_disabled
-                dns=["8.8.8.8"],        # ✅ Fix DNS resolution
+                network_mode="none",     # default: NO network for safety
+                # dns=["8.8.8.8"],       # only if you later enable network_mode="bridge"
                 environment={
-                    "HTTP_PROXY": "http://host.docker.internal:3128",
-                    "HTTPS_PROXY": "http://host.docker.internal:3128"
+                    # keep empty by default; add proxies only if needed
                 },
-                timeout=timeout
+                runtime=None
             )
-            
-            
             return result.decode("utf-8")
         except ContainerError as e:
-            return f"Execution error: {e.stderr.decode('utf-8')}"
-        except APIError as e:
-            return f"Docker API error: {str(e)}"
+            try:
+                return f"Execution error:\n{e.stderr.decode('utf-8')}"
+            except Exception:
+                return f"Execution error: {str(e)}"
+        except (APIError, DockerException) as e:
+            raise DockerException(f"Docker error: {e}")
         finally:
             shutil.rmtree(workdir, ignore_errors=True)

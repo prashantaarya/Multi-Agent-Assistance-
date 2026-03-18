@@ -205,3 +205,46 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ── JARVIS project-specific ───────────────────────────────────────────────────
+
+# Documentation files (keep only README.md in repo)
+ARCHITECTURE_GUIDE.md
+PROJECT_STRUCTURE.md
+QUICK_REFERENCE.md
+LEARNING_GUIDE.md
+VISUAL_WORKFLOW_GUIDE.md
+DOCUMENTATION_INDEX.md
+COMPLETE_SUMMARY.md
+
+# API keys — already covered by .env above, but also catch local variants
+.env.local
+.env.*.local
+
+# Runtime logs (auto-generated, not needed in repo)
+jarvis.log
+app.log
+*.log
+
+# Persistent to-do list (user data, changes per machine)
+tasks.json
+
+# Memory storage — session logs and semantic store (user-specific runtime data)
+memory/conversation_logs/
+memory/vector_store.pkl
+memory/*.pkl
+
+# Legacy / temp data
+data/reminders.json
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# VS Code workspace settings (optional — remove the # if you want to ignore)
+# .vscode/
+
+# Python virtual environments (common names)
+venv/
+.venv/
+env/
