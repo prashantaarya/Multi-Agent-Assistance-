@@ -15,9 +15,18 @@ httpx>=0.25.0           # used internally by OpenAI-compatible client
 # ── Web search ───────────────────────────────────────────────────────────────
 ddgs>=9.11.4            # DuckDuckGo real web search (renamed from duckduckgo-search)
 
+# ── Gmail API (install for production, mock mode works without) ──────────────
+google-auth-oauthlib>=1.0.0     # OAuth 2.0 for Gmail
+google-api-python-client>=2.0.0  # Gmail API client
+
 # ── Environment & utilities ──────────────────────────────────────────────────
 python-dotenv>=1.0.0
 aiofiles>=23.0.0
+
+# ── Telegram Bot API (aiohttp already installed — no extra SDK needed) ────────
+# Add these to your .env:
+#   TELEGRAM_BOT_TOKEN=<your_bot_token>       (from @BotFather)
+#   TELEGRAM_DEFAULT_CHAT_ID=<your_chat_id>   (optional default target)
 
 # ── Development / testing (optional) ─────────────────────────────────────────
 pytest>=7.0.0

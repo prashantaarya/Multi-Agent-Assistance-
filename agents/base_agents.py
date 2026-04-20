@@ -16,11 +16,16 @@ from .task_agents import TaskAgent
 from .tool_agents import ToolAgent
 from .api_agent import APIAgent
 from .search_agent import SearchAgent
+from .telegram_agent import TelegramAgent
+from .calendar_agent import CalendarAgent
 
 # Capability routing + typed contracts + tracing
 from core.schemas import Task, PlannerDecision, Result, Artifact, ExecutionMode, CapabilityCall
-from core.capabilities import resolve, list_capabilities, generate_planner_prompt, list_tools
+from core.capabilities import resolve, list_capabilities, list_tools
 from core.tracing import get_tracer
+
+# True Agent Architecture - agent router
+from core.agent_router import get_router
 
 # Memory system for context-aware responses
 from .memory import get_memory
@@ -87,106 +92,177 @@ model_client = OpenAIChatCompletionClient(
 # MUST be initialized BEFORE planner to populate the tool registry
 # ──────────────────────────────────────────────────────────────────────────────
 
-task_agent   = TaskAgent(name="task", model_client=model_client)
-tool_agent   = ToolAgent(name="tool", model_client=model_client)
-api_agent    = APIAgent(name="api", model_client=model_client)
-search_agent = SearchAgent(name="search", model_client=model_client)
+task_agent     = TaskAgent(name="task", model_client=model_client)
+tool_agent     = ToolAgent(name="tool", model_client=model_client)
+api_agent      = APIAgent(name="api", model_client=model_client)
+search_agent   = SearchAgent(name="search", model_client=model_client)
+telegram_agent = TelegramAgent(name="telegram", model_client=model_client)
+calendar_agent = CalendarAgent(name="calendar", model_client=model_client)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Planner (brain): delegates by CAPABILITY with strict JSON
-# Auto-generates tool documentation from registry (Industry Best Practice)
+# True Agent Architecture: Register domain agents
+# Each domain agent is an LLM that thinks + calls tools
 # ──────────────────────────────────────────────────────────────────────────────
 
-PLANNER_PROMPT_V = "planner@v4.0"
+from agents.domain_agents import register_all_domain_agents
+agent_router = register_all_domain_agents(model_client)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Planner (brain): delegates to DOMAIN AGENTS (True Agent Architecture)
+# Planner picks the right agent, the agent decides which tools to call
+# ──────────────────────────────────────────────────────────────────────────────
+
+PLANNER_PROMPT_V = "planner@v6.1"  # Telegram-intent routing hardening
 
 def _build_planner_system_message() -> str:
     """
-    Build planner system message with AUTO-GENERATED tool documentation.
-    This ensures the planner always has up-to-date tool information.
-    Includes execution mode selection (single vs react vs parallel).
-    """
-    # Get auto-generated tool documentation from registry
-    tools_doc = generate_planner_prompt()
+    Build planner system message for TRUE AGENT Architecture.
     
+    ALL queries route to DOMAIN AGENTS (not direct functions).
+    Each domain agent is an LLM that decides which tools to call.
+    """
+    # Get high-level agent descriptions from the router.
+    # SECURITY / TOKEN BEST PRACTICE: planner only sees agent names + descriptions.
+    # Full tool schemas are passed to each agent separately at execution time.
+    router = get_router()
+    agents_doc = router.get_agent_descriptions()
+
     return f"""
 [{PLANNER_PROMPT_V}]
-You are the Planner (JARVIS's brain). Analyze the user's request and output STRICT JSON.
+You are the Planner (JARVIS's brain). Analyze the user's request and route to the right DOMAIN AGENT.
 
-## OUTPUT SCHEMA
+## TRUE MULTI-AGENT ARCHITECTURE
+You have specialized DOMAIN AGENTS. Each agent is an AI expert that thinks and decides which tools to call.
+Your job: pick the RIGHT AGENT and describe the TASK clearly. The agent handles the rest.
+
+## AVAILABLE DOMAIN AGENTS
+{agents_doc}
+
+## OUTPUT SCHEMA (ALWAYS output valid JSON)
 {{
+  "agent": "<agent_name>",  // REQUIRED: gmail, search, task, api, code
+  "task": "<clear description of what the user wants>",  // REQUIRED
   "capability": "<primary_capability_name>",
-  "inputs": {{ <required_parameters> }},
+  "inputs": {{ <parameters> }},
   "confidence": <0.0 to 1.0>,
-  "fallback": "<alternative_capability | null>",
+  "fallback": "<alternative_agent | null>",
   "mode": "single | react | parallel",
-  "reasoning": "<brief explanation of your decision>",
-  "parallel_capabilities": [  // ONLY for mode="parallel"
-    {{"capability": "<cap1>", "inputs": {{...}}, "label": "<friendly_name>"}},
-    {{"capability": "<cap2>", "inputs": {{...}}, "label": "<friendly_name>"}}
-  ]
+  "reasoning": "<brief explanation>"
 }}
 
-## MODE SELECTION RULES (CRITICAL)
+## ROUTING RULES (STRICT - ALWAYS route to a domain agent)
 
-### "single" (Default)
-Use for straightforward requests with ONE clear capability.
-Examples: "weather in Delhi", "add task", "run code"
+| Query Type | Route To | Examples |
+|------------|----------|----------|
+| EMAIL | agent: "gmail" | inbox, read email, send, draft, reply, search emails |
+| FACTUAL/RESEARCH | agent: "search" | who/what/when/where/why/how, history, facts, definitions |
+| WEATHER | agent: "api" | weather in <city>, temperature, forecast |
+| NEWS | agent: "api" | latest news, headlines, news about <topic> |
+| STOCKS | agent: "api" | stock price, AAPL, market, shares |
+| TASKS/TODO | agent: "task" | add task, list tasks, complete task, clear tasks |
+| CODE | agent: "code" | run Python, calculate, execute code |
+| TELEGRAM | agent: "telegram" | send message, check Telegram, notify, alert via Telegram |
+| CALENDAR | agent: "calendar" | schedule meeting, check calendar, book appointment, am I free, cancel event |
+| SMALL TALK | NO JSON | hi, hello, how are you, thanks (ONLY when no domain keyword is present) |
 
-### "parallel" (Multiple Independent Tasks)
-Use when user wants MULTIPLE INDEPENDENT things done at once:
-- Keywords: "and", "also", "both", "as well as", "along with"
-- Pattern: "Get X and Y", "Show me A and B"
-- The tasks must be INDEPENDENT (not dependent on each other)
-
-### "react" (Complex Reasoning)
-Use for tasks requiring STEP-BY-STEP reasoning where results depend on each other:
-- Comparisons requiring analysis: "which is better"
-- Research tasks: "investigate", "analyze", "explain in detail"
-- Tasks where step 2 depends on step 1's result
-
-## {tools_doc}
-
-## ROUTING RULES (STRICT)
-1. FACTUAL QUESTIONS: who/what/when/where/why/how -> "search.web"
-2. TIME-SENSITIVE: "today", "latest", "current", "now" -> appropriate API or search
-3. TASK MANAGEMENT: add/list/complete/clear tasks -> "todo.*" capabilities
-4. CODE EXECUTION: run Python code -> "code.execute"
-5. WEATHER/NEWS/STOCKS: Use corresponding API capabilities
-6. SMALL TALK: greetings, opinions -> respond directly (NO JSON)
-
-## EXAMPLES - SINGLE MODE
+## EXAMPLES - WEATHER/NEWS/STOCKS → API AGENT
 
 User: "what's the weather in Delhi?"
-{{"capability":"weather.read","inputs":{{"city":"Delhi"}},"confidence":0.92,"fallback":"search.web","mode":"single","reasoning":"Simple weather lookup"}}
+{{"agent":"api","task":"Get current weather in Delhi","capability":"weather.read","inputs":{{"city":"Delhi"}},"confidence":0.95,"fallback":"search","mode":"single","reasoning":"Weather query routes to API agent"}}
+
+User: "latest tech news"
+{{"agent":"api","task":"Get latest technology news","capability":"news.read","inputs":{{"topic":"technology"}},"confidence":0.92,"fallback":"search","mode":"single","reasoning":"News query routes to API agent"}}
+
+User: "AAPL stock price"
+{{"agent":"api","task":"Get current Apple stock price","capability":"stock.read","inputs":{{"symbol":"AAPL"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Stock query routes to API agent"}}
+
+User: "weather in Mumbai and stock update"
+{{"agent":"api","task":"Get Mumbai weather and market update","capability":"weather.read","inputs":{{}},"confidence":0.88,"mode":"single","reasoning":"API agent can handle both weather and stocks"}}
+
+## EXAMPLES - SEARCH → SEARCH AGENT
+
+User: "who invented Python?"
+{{"agent":"search","task":"Find who invented the Python programming language","capability":"search.web","inputs":{{"query":"who invented Python"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Factual question → search agent"}}
+
+User: "when did World War 2 end?"
+{{"agent":"search","task":"Find when World War 2 ended","capability":"search.web","inputs":{{"query":"when did World War 2 end"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Historical fact → search agent"}}
+
+User: "what is quantum computing?"
+{{"agent":"search","task":"Explain what quantum computing is","capability":"search.web","inputs":{{"query":"what is quantum computing"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Definition → search agent"}}
+
+## EXAMPLES - EMAIL → GMAIL AGENT
+
+User: "check my inbox"
+{{"agent":"gmail","task":"Check email inbox for new and unread messages","capability":"gmail.inbox","inputs":{{"max_results":10,"unread_only":true}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Email query → gmail agent"}}
+
+User: "find urgent emails and draft a reply"
+{{"agent":"gmail","task":"Find urgent emails and draft professional replies","capability":"gmail.inbox","inputs":{{}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Complex email task → gmail agent handles multi-step"}}
+
+## EXAMPLES - TASKS → TASK AGENT
 
 User: "add task Buy groceries"
-{{"capability":"todo.add","inputs":{{"description":"Buy groceries"}},"confidence":0.95,"fallback":"todo.list","mode":"single","reasoning":"Direct task addition"}}
+{{"agent":"task","task":"Add a new task: Buy groceries","capability":"todo.add","inputs":{{"description":"Buy groceries"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Task management → task agent"}}
 
-## EXAMPLES - PARALLEL MODE (Independent tasks)
+User: "show my tasks"
+{{"agent":"task","task":"List all current tasks","capability":"todo.list","inputs":{{}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"List tasks → task agent"}}
 
-User: "get weather in Delhi and latest tech news"
-{{"capability":"weather.read","inputs":{{"city":"Delhi"}},"confidence":0.9,"fallback":null,"mode":"parallel","reasoning":"Two independent lookups - weather AND news","parallel_capabilities":[{{"capability":"weather.read","inputs":{{"city":"Delhi"}},"label":"Delhi Weather"}},{{"capability":"news.fetch","inputs":{{"topic":"technology"}},"label":"Tech News"}}]}}
+User: "complete task 1"
+{{"agent":"task","task":"Mark task number 1 as done","capability":"todo.done","inputs":{{"number":1}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Complete task → task agent"}}
 
-User: "show me both Mumbai weather and stock market update"
-{{"capability":"weather.read","inputs":{{"city":"Mumbai"}},"confidence":0.88,"fallback":null,"mode":"parallel","reasoning":"User wants two independent pieces of info","parallel_capabilities":[{{"capability":"weather.read","inputs":{{"city":"Mumbai"}},"label":"Mumbai Weather"}},{{"capability":"stock.price","inputs":{{"symbol":"NIFTY"}},"label":"Stock Update"}}]}}
+## EXAMPLES - TELEGRAM → TELEGRAM AGENT
 
-User: "add task call mom and also add task buy milk"
-{{"capability":"todo.add","inputs":{{"description":"call mom"}},"confidence":0.9,"fallback":null,"mode":"parallel","reasoning":"Two independent task additions","parallel_capabilities":[{{"capability":"todo.add","inputs":{{"description":"call mom"}},"label":"Task 1"}},{{"capability":"todo.add","inputs":{{"description":"buy milk"}},"label":"Task 2"}}]}}
+User: "send hello on Telegram"
+{{"agent":"telegram","task":"Send 'hello' message via Telegram","capability":"telegram.send_message","inputs":{{"text":"hello"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Telegram messaging → telegram agent"}}
 
-## EXAMPLES - REACT MODE (Step-by-step reasoning)
+User: "check my Telegram messages"
+{{"agent":"telegram","task":"Fetch recent incoming Telegram messages","capability":"telegram.get_updates","inputs":{{"limit":10}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Read Telegram inbox → telegram agent"}}
 
-User: "compare weather in Delhi vs Mumbai and recommend which is better for travel"
-{{"capability":"weather.read","inputs":{{"city":"Delhi"}},"confidence":0.7,"fallback":"search.web","mode":"react","reasoning":"Comparison needs both data points then analysis"}}
+User: "send a daily summary alert on Telegram"
+{{"agent":"telegram","task":"Send formatted daily summary alert via Telegram","capability":"telegram.send_alert","inputs":{{"title":"Daily Summary","body":"Your daily summary","level":"info"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Alert/notification → telegram agent"}}
 
-User: "research quantum computing and explain its applications"
-{{"capability":"search.web","inputs":{{"query":"quantum computing explanation"}},"confidence":0.65,"fallback":null,"mode":"react","reasoning":"Research requires multiple searches and synthesis"}}
+## EXAMPLES - CALENDAR → CALENDAR AGENT
 
-## SMALL TALK (NO JSON)
+User: "schedule a meeting tomorrow at 2pm"
+{{"agent":"calendar","task":"Create calendar event for meeting tomorrow at 2pm","capability":"calendar.create_event","inputs":{{"title":"Meeting","start_time":"2026-04-16T14:00:00","end_time":"2026-04-16T15:00:00"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Schedule meeting → calendar agent"}}
 
-User: "Hi, how are you?"
-Hello! I'm JARVIS, your AI assistant. How can I help you today?
+User: "what's on my calendar this week"
+{{"agent":"calendar","task":"List all calendar events for this week","capability":"calendar.list_events","inputs":{{"days_ahead":"7","max_results":"20"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"View calendar → calendar agent"}}
 
-IMPORTANT: Output ONLY valid JSON for capability routing. NO markdown, NO extra text.
+User: "am I free tomorrow at 3pm"
+{{"agent":"calendar","task":"Check availability for tomorrow 3pm-4pm","capability":"calendar.check_availability","inputs":{{"start_time":"2026-04-16T15:00:00","end_time":"2026-04-16T16:00:00"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Check availability → calendar agent"}}
+
+User: "cancel the team standup meeting"
+{{"agent":"calendar","task":"Delete team standup meeting from calendar","capability":"calendar.delete_event","inputs":{{"event_identifier":"Team Standup"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Delete event → calendar agent"}}
+
+User: "add John to the project review meeting"
+{{"agent":"calendar","task":"Add John as attendee to project review meeting","capability":"calendar.manage_attendees","inputs":{{"event_identifier":"Project Review","action":"add","email":"john@company.com"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Manage attendees → calendar agent"}}
+
+## EXAMPLES - CODE → CODE AGENT
+
+User: "run print(2+2)"
+{{"agent":"code","task":"Execute Python code: print(2+2)","capability":"code.execute","inputs":{{"code_snippet":"print(2+2)"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Code execution → code agent"}}
+
+User: "calculate the square root of 144"
+{{"agent":"code","task":"Calculate square root of 144 using Python","capability":"code.execute","inputs":{{"code_snippet":"import math; print(math.sqrt(144))"}},"confidence":0.9,"fallback":"search","mode":"single","reasoning":"Math calculation → code agent"}}
+
+## EXAMPLES - REACT MODE (Complex multi-step)
+
+User: "compare weather in Delhi vs Mumbai for travel"
+{{"agent":"api","task":"Compare weather in Delhi and Mumbai and recommend for travel","capability":"weather.read","inputs":{{}},"confidence":0.85,"mode":"react","reasoning":"Comparison needs multiple API calls then analysis"}}
+
+User: "research AI trends and summarize"
+{{"agent":"search","task":"Research current AI trends and provide summary","capability":"search.web","inputs":{{}},"confidence":0.8,"mode":"react","reasoning":"Research needs multiple searches and synthesis"}}
+
+## SMALL TALK (NO JSON - respond naturally)
+
+IMPORTANT: If the user mentions a domain keyword (telegram, email, task, weather, news, stock, code, search), DO NOT treat it as small talk.
+You MUST output JSON and route to the appropriate domain agent.
+
+User: "Hi!" → Hello! I'm JARVIS. How can I help you today?
+User: "thanks" → You're welcome! Let me know if you need anything else.
+User: "hi telegram bot" → {{"agent":"telegram","task":"Send a friendly greeting reply via Telegram and confirm bot readiness","capability":"telegram.send_message","inputs":{{"text":"Hi! I am online and ready to help."}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Contains telegram domain keyword, should route to Telegram agent"}}
+
+CRITICAL: ALWAYS include "agent" and "task" fields. Output ONLY valid JSON for routing (no markdown).
 """.strip()
 
 
@@ -203,6 +279,20 @@ def _make_planner() -> AssistantAgent:
         model_client=model_client,
         system_message=PLANNER_SYSTEM_MESSAGE,
     )
+
+
+def _looks_telegram_intent(text: str) -> bool:
+    """Detect explicit Telegram intent keywords for routing safety."""
+    lt = (text or "").lower()
+    telegram_terms = [
+        "telegram",
+        "tg",
+        "bot",
+        "message on telegram",
+        "send on telegram",
+        "notify on telegram",
+    ]
+    return any(term in lt for term in telegram_terms)
 
 # Agent registry (by name) for reference/diagnostics; routing uses capabilities
 AGENTS = {
@@ -360,18 +450,33 @@ class JARVISAssistant:
         # 2) If planner answered directly (no JSON)...
         s, e = buffer.find("{"), buffer.rfind("}")
         if s == -1 or e == -1 or e <= s:
-            # Safety net: if factual or time-sensitive -> force search.web
-            if _looks_factual_question(message) or _looks_time_sensitive(message):
-                with tracer.span("override.search_web"):
-                    resolved = resolve("search.web")
-                    if resolved:
-                        agent_name, handler = resolved
+            # Safety net: if user clearly asked for Telegram, force Telegram domain agent
+            if _looks_telegram_intent(message):
+                with tracer.span("override.telegram_agent"):
+                    router = get_router()
+                    telegram_domain = router.get_agent("telegram")
+                    if telegram_domain:
+                        tracer.route("orchestrator", "🧠 Overriding to Telegram Agent (explicit telegram intent)")
                         try:
-                            return await handler(query=message)
-                        except Exception:
-                            # If search fails, fall back to planner’s text
+                            return await telegram_domain.execute(message, request_id)
+                        except Exception as e:
+                            tracer.thought("telegram", f"Telegram agent failed: {e}")
                             return buffer
-                    return buffer  # capability not registered
+                    return buffer
+
+            # Safety net: if factual or time-sensitive -> route to SEARCH DOMAIN AGENT
+            if _looks_factual_question(message) or _looks_time_sensitive(message):
+                with tracer.span("override.search_agent"):
+                    router = get_router()
+                    search_domain = router.get_agent("search")
+                    if search_domain:
+                        tracer.route("orchestrator", "🧠 Overriding to Search Agent (factual/time-sensitive)")
+                        try:
+                            return await search_domain.execute(message, request_id)
+                        except Exception as e:
+                            tracer.thought("search", f"Search agent failed: {e}")
+                            return buffer
+                    return buffer  # search agent not registered
             # Otherwise accept the planner's direct answer
             with tracer.span("planner.direct_answer"):
                 return buffer
@@ -390,16 +495,108 @@ class JARVISAssistant:
             except Exception:
                 return buffer  # invalid JSON - use planner text
 
+        # ══════════════════════════════════════════════════════════════════
+        # TRUE AGENT ARCHITECTURE: ALL queries route to domain agents
+        # Each domain agent is an LLM that thinks and decides which tools
+        # to call. This is the core of the multi-agent system.
+        # ══════════════════════════════════════════════════════════════════
+        
+        agent_name = raw.get("agent")
+        agent_task = raw.get("task", message)
+        router = get_router()
+        
+        # If planner specified an agent, route to it
+        if agent_name:
+            domain_agent = router.get_agent(agent_name)
+            
+            if domain_agent:
+                tracer.route("orchestrator", f"🧠 Routing to {agent_name.upper()} Agent (TRUE AGENT)")
+                with tracer.span(f"domain_agent.{agent_name}", task=agent_task[:80]):
+                    try:
+                        output = await domain_agent.execute(agent_task, request_id)
+                        
+                        # Save to memory
+                        if self.enable_memory and self.memory:
+                            try:
+                                self.memory.remember_interaction(
+                                    user_message=message,
+                                    assistant_response=output,
+                                    session_id=self._current_session_id,
+                                    capability=f"agent.{agent_name}",
+                                    confidence=decision.confidence
+                                )
+                            except Exception:
+                                pass
+                        
+                        return output
+                    except Exception as e:
+                        tracer.thought(agent_name, f"Domain agent error: {e}")
+                        # Try fallback agent if specified
+                        fallback_name = raw.get("fallback") or decision.fallback
+                        if fallback_name and fallback_name != agent_name:
+                            fallback_agent = router.get_agent(fallback_name)
+                            if fallback_agent:
+                                tracer.route("orchestrator", f"🔄 Fallback to {fallback_name.upper()} Agent")
+                                try:
+                                    return await fallback_agent.execute(agent_task, request_id)
+                                except Exception:
+                                    pass
+        
+        # ══════════════════════════════════════════════════════════════════
+        # SMART FALLBACK: Infer domain agent from capability name
+        # Map capabilities to domain agents for TRUE AGENT routing
+        # ══════════════════════════════════════════════════════════════════
+        
+        capability = decision.capability
+        
+        # Map capabilities to domain agents
+        capability_to_agent = {
+            # Search capabilities
+            "search.web": "search", "search.wikipedia": "search",
+            # API capabilities
+            "weather.read": "api", "news.read": "api", "news.fetch": "api",
+            "stock.read": "api", "stock.price": "api",
+            # Task capabilities
+            "todo.add": "task", "todo.list": "task", "todo.done": "task", "todo.clear": "task",
+            # Gmail capabilities
+            "gmail.inbox": "gmail", "gmail.read": "gmail", "gmail.search": "gmail",
+            "gmail.draft": "gmail", "gmail.reply": "gmail", "gmail.send": "gmail",
+            # Code capabilities
+            "code.execute": "code",
+            # Telegram capabilities
+            "telegram.send_message": "telegram",
+            "telegram.get_updates": "telegram",
+            "telegram.get_chat_info": "telegram",
+            "telegram.send_alert": "telegram",
+        }
+        
+        inferred_agent = capability_to_agent.get(capability)
+        if inferred_agent:
+            domain_agent = router.get_agent(inferred_agent)
+            if domain_agent:
+                tracer.route("orchestrator", f"🧠 Inferred routing to {inferred_agent.upper()} Agent from capability '{capability}'")
+                with tracer.span(f"domain_agent.{inferred_agent}", task=message[:80]):
+                    try:
+                        return await domain_agent.execute(message, request_id)
+                    except Exception as e:
+                        tracer.thought(inferred_agent, f"Inferred agent failed: {e}")
+        
+        # ══════════════════════════════════════════════════════════════════
+        # LEGACY FALLBACK: Only if no domain agent available
+        # This path should rarely be used in TRUE AGENT architecture
+        # ══════════════════════════════════════════════════════════════════
+
         # Confidence/time gate: if planner wants to answer directly with low confidence, force search
         if decision.capability == "planner" and (decision.confidence is None or decision.confidence < 0.7):
             with tracer.span("override.planner_low_conf_to_search", confidence=decision.confidence):
-                resolved = resolve("search.web")
-                if resolved:
-                    _, handler = resolved
+                # Route to search domain agent
+                search_domain = router.get_agent("search")
+                if search_domain:
+                    tracer.route("orchestrator", "🔄 Low confidence → routing to SEARCH Agent")
                     try:
-                        return await handler(query=message)
+                        return await search_domain.execute(message, request_id)
                     except Exception:
-                        pass  # if search fails, continue normal flow (rare)
+                        pass
 
         # 4) Check execution mode from planner
         

@@ -114,6 +114,24 @@ class ToolSchema(BaseModel):
         inputs_example = {p.name: f"<{p.type.value}>" for p in self.parameters}
         return f'- "{self.name}": {self.description} | inputs: {inputs_example}'
 
+
+class Capability(BaseModel):
+    """
+    Describes a high-level capability (group of related tools).
+    Used for capability-based planning and routing.
+    """
+    name: str                                     # e.g., "gmail.inbox"
+    description: str                              # What this capability does
+    required_tools: List[str] = Field(default_factory=list)  # Tools needed
+    example_queries: List[str] = Field(default_factory=list)  # Natural language examples
+    
+    def matches_query(self, query: str) -> bool:
+        """Check if query matches any example patterns"""
+        query_lower = query.lower()
+        return any(ex.lower() in query_lower or query_lower in ex.lower() 
+                   for ex in self.example_queries)
+
+
 class Artifact(BaseModel):
     kind: str
     data: Dict[str, Any]
@@ -148,6 +166,10 @@ class PlannerDecision(BaseModel):
     fallback: Optional[str] = None  # another capability or "planner"
     mode: ExecutionMode = ExecutionMode.SINGLE  # Execution mode
     reasoning: Optional[str] = None  # Brief reasoning for the decision
+    
+    # True Agent Architecture: route to a domain agent
+    agent: Optional[str] = None  # Domain agent name (gmail, search, task, code)
+    task: Optional[str] = None  # Natural language task description for the agent
     
     # For PARALLEL mode: list of capabilities to execute simultaneously
     parallel_capabilities: List[CapabilityCall] = Field(default_factory=list)

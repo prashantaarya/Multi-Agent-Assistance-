@@ -1,5 +1,6 @@
 # agents/api_agent.py
 
+from typing import Dict, Any
 from autogen_agentchat.agents import AssistantAgent
 from .api_manager import APIManager
 from core.capabilities import register
@@ -90,35 +91,41 @@ class APIAgent(AssistantAgent):
             ]
         )
 
-    async def get_weather(self, city: str) -> str:
-        """Get weather with error handling"""
+    async def get_weather(self, city: str) -> Dict[str, Any]:
+        """Get weather with error handling and structured data"""
         try:
             return await self.api.get_weather(city)
         except Exception as e:
             from core.errors import JARVISError, ErrorHandler
             if isinstance(e, JARVISError):
-                return ErrorHandler.format_for_user(e)
-            return f"❌ Weather error: {str(e)}"
+                error_msg = ErrorHandler.format_for_user(e)
+            else:
+                error_msg = f"❌ Weather error: {str(e)}"
+            return {"response": error_msg, "data": None}
 
-    async def get_news(self, topic: str) -> str:
-        """Get news with error handling"""
+    async def get_news(self, topic: str) -> Dict[str, Any]:
+        """Get news with error handling and structured data"""
         try:
             return await self.api.get_news(topic)
         except Exception as e:
             from core.errors import JARVISError, ErrorHandler
             if isinstance(e, JARVISError):
-                return ErrorHandler.format_for_user(e)
-            return f"❌ News error: {str(e)}"
+                error_msg = ErrorHandler.format_for_user(e)
+            else:
+                error_msg = f"❌ News error: {str(e)}"
+            return {"response": error_msg, "data": None}
 
-    async def get_stock(self, symbol: str) -> str:
-        """Get stock with error handling"""
+    async def get_stock(self, symbol: str) -> Dict[str, Any]:
+        """Get stock with error handling and structured data"""
         try:
             return await self.api.get_stock(symbol)
         except Exception as e:
             from core.errors import JARVISError, ErrorHandler
             if isinstance(e, JARVISError):
-                return ErrorHandler.format_for_user(e)
-            return f"❌ Stock error: {str(e)}"
+                error_msg = ErrorHandler.format_for_user(e)
+            else:
+                error_msg = f"❌ Stock error: {str(e)}"
+            return {"response": error_msg, "data": None}
 
     async def aask(self, user_proxy, message: str, **kwargs) -> str:
         """Route prefixed messages to real APIs, otherwise fallback to LLM."""

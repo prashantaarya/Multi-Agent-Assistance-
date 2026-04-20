@@ -9,12 +9,14 @@ Features:
 - OpenAPI documentation
 """
 
+import os
 import time
 import asyncio
 import logging
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 
+import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -82,12 +84,223 @@ class AskResponse(BaseModel):
     agent_used: str
     status: str = "success"
     request_id: str
+    data: Optional[Dict[str, Any]] = None  # Structured data (for Calendar, Gmail, Task, API agents)
 
 class HealthResponse(BaseModel):
     status: str
     agents_available: List[str]
     version: str
     request_id: str
+
+# -----------------------------------------------------------------------------
+# Telegram Webhook — Security helpers
+# -----------------------------------------------------------------------------
+_TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
+
+def _telegram_url(method: str) -> str:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    return _TELEGRAM_API.format(token=token, method=method)
+
+def _get_allowed_chat_ids() -> Set[str]:
+    """
+    Return allowed Telegram chat IDs from env.
+    TELEGRAM_ALLOWED_CHAT_IDS=123456,789012   (comma-separated)
+    If not set, falls back to TELEGRAM_DEFAULT_CHAT_ID only.
+    Empty string → all chats allowed (dev mode, not recommended for production).
+    """
+    raw = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    if not raw:
+        default = os.getenv("TELEGRAM_DEFAULT_CHAT_ID", "")
+        return {default.strip()} if default.strip() else set()
+    return {cid.strip() for cid in raw.split(",") if cid.strip()}
+
+async def _send_telegram_reply(chat_id: str, text: str) -> None:
+    """Fire-and-forget: send a reply to the Telegram chat."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        return
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(_telegram_url("sendMessage"), json=payload)
+    except Exception as e:
+        logger.warning(f"Telegram reply failed: {e}")
+
+
+async def _send_telegram_chat_action(chat_id: str, action: str = "typing") -> None:
+    """Best-effort Telegram chat action (typing/upload, etc.)."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(
+                _telegram_url("sendChatAction"),
+                json={"chat_id": chat_id, "action": action},
+            )
+    except Exception as e:
+        logger.warning(f"Telegram chat action failed: {e}")
+
+# -----------------------------------------------------------------------------
+# Telegram Webhook — Pydantic models (mirrors Telegram Bot API schema)
+# -----------------------------------------------------------------------------
+class TelegramUser(BaseModel):
+    id: int
+    first_name: str = ""
+    username: Optional[str] = None
+
+class TelegramChat(BaseModel):
+    id: int
+    type: str = "private"
+
+class TelegramMessage(BaseModel):
+    message_id: int
+    from_: Optional[TelegramUser] = None
+    chat: TelegramChat
+    text: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+        fields = {"from_": "from"}
+
+class TelegramUpdate(BaseModel):
+    update_id: int
+    message: Optional[TelegramMessage] = None
+
+# -----------------------------------------------------------------------------
+# Telegram Webhook endpoint
+# POST /api/v1/telegram/webhook
+# -----------------------------------------------------------------------------
+@router.post("/telegram/webhook", include_in_schema=True)
+async def telegram_webhook(update: TelegramUpdate, request: Request):
+    """
+    Telegram Bot webhook — receives all incoming messages.
+
+    Flow:
+        User sends message → Telegram → POST /telegram/webhook
+        → Security check (allowed chat IDs)
+        → Jarvis planner + domain agents process message
+        → Reply sent back to user via Telegram sendMessage API
+
+    Setup:
+        1. Set TELEGRAM_BOT_TOKEN in .env
+        2. Set TELEGRAM_WEBHOOK_URL=https://<your-public-url>/api/v1/telegram/webhook
+        3. Run: POST /api/v1/telegram/set-webhook
+        OR call the Telegram API directly:
+           https://api.telegram.org/bot<TOKEN>/setWebhook?url=<WEBHOOK_URL>
+    """
+    rid = _new_request_id()
+
+    # Only process text messages; silently ignore stickers, photos etc.
+    msg = update.message
+    if not msg or not msg.text:
+        return {"ok": True}
+
+    chat_id = str(msg.chat.id)
+    user_text = msg.text.strip()
+    sender = (msg.from_.username or msg.from_.first_name) if msg.from_ else "unknown"
+
+    logger.info(f"[rid={rid}] 📨 Telegram message from {sender} (chat={chat_id}): '{user_text[:80]}'")
+
+    # ── Security: reject messages from unknown chats ──────────────────────────
+    allowed = _get_allowed_chat_ids()
+    if allowed and chat_id not in allowed:
+        logger.warning(f"[rid={rid}] Telegram message blocked — chat {chat_id} not in allowed list")
+        # Send polite rejection so user knows the bot is running
+        await _send_telegram_reply(chat_id, "⛔ You are not authorized to use this bot.")
+        return {"ok": True}
+
+    # ── Route through Jarvis ──────────────────────────────────────────────────
+    try:
+        # Show "typing..." indicator best-effort while Jarvis processes the message.
+        asyncio.create_task(_send_telegram_chat_action(chat_id, "typing"))
+
+        # Process through Jarvis
+        response = await asyncio.wait_for(
+            jarvis.process_request(user_text, request_id=rid),
+            timeout=60.0,
+        )
+
+        # Send reply
+        await _send_telegram_reply(chat_id, response)
+        logger.info(f"[rid={rid}] ✅ Replied to {sender} (chat={chat_id}) — {len(response)} chars")
+
+    except asyncio.TimeoutError:
+        logger.warning(f"[rid={rid}] Telegram request timed out")
+        await _send_telegram_reply(chat_id, "⏳ Sorry, that took too long. Please try again.")
+    except Exception as e:
+        logger.error(f"[rid={rid}] Telegram webhook error: {e}")
+        await _send_telegram_reply(chat_id, "❌ Something went wrong. Please try again.")
+
+    # Always return 200 so Telegram stops retrying
+    return {"ok": True}
+
+
+@router.post("/telegram/set-webhook")
+async def set_telegram_webhook(request: Request):
+    """
+    Register your public URL as the Telegram webhook.
+    Requires TELEGRAM_WEBHOOK_URL in .env:
+        TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/telegram/webhook
+
+    For local testing use ngrok:
+        ngrok http 8000
+        → set TELEGRAM_WEBHOOK_URL=https://xxxx.ngrok.io/api/v1/telegram/webhook
+    """
+    rid = _get_request_id(request)
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "")
+
+    if not token:
+        raise HTTPException(status_code=400, detail="TELEGRAM_BOT_TOKEN not set in .env")
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="TELEGRAM_WEBHOOK_URL not set in .env")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                _telegram_url("setWebhook"),
+                json={
+                    "url": webhook_url,
+                    "allowed_updates": ["message"],
+                    "drop_pending_updates": True,
+                },
+            ) as resp:
+                data = await resp.json()
+
+        if data.get("ok"):
+            logger.info(f"[rid={rid}] ✅ Telegram webhook set to: {webhook_url}")
+            return {
+                "request_id": rid,
+                "status": "success",
+                "webhook_url": webhook_url,
+                "message": "✅ Telegram webhook registered. Bot will now auto-reply to messages.",
+            }
+        return {
+            "request_id": rid,
+            "status": "error",
+            "description": data.get("description"),
+        }
+    except Exception as e:
+        logger.error(f"[rid={rid}] set-webhook error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/telegram/webhook-info")
+async def get_telegram_webhook_info(request: Request):
+    """Check current webhook status registered with Telegram."""
+    rid = _get_request_id(request)
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        raise HTTPException(status_code=400, detail="TELEGRAM_BOT_TOKEN not set in .env")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(_telegram_url("getWebhookInfo")) as resp:
+                data = await resp.json()
+        return {"request_id": rid, **data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # -----------------------------------------------------------------------------
 # Endpoints
@@ -136,6 +349,8 @@ async def ask_jarvis(payload: AskRequest, request: Request):
 async def ask_direct(payload: AskRequest, request: Request):
     """
     Direct chat with a specific agent (bypasses planner).
+    If agent="auto" or "planner", uses full orchestration (planner → domain agent execution).
+    Otherwise, directly invokes the specified agent.
     """
     rid = _get_request_id(request)
     try:
@@ -148,14 +363,33 @@ async def ask_direct(payload: AskRequest, request: Request):
 
         logger.info(f"[rid={rid}] /ask-direct; agent={agent_name}; msg='{user_message[:120]}'")
 
-        response_text = await jarvis.chat_direct(user_message, agent_name, request_id=rid)
+        # If planner mode, use full orchestration (planner → route → execute)
+        if agent_name == "planner":
+            response_result = await jarvis.process_request(user_message, request_id=rid)
+        else:
+            # Direct agent invocation (no planner)
+            response_result = await jarvis.chat_direct(user_message, agent_name, request_id=rid)
+
+        # Handle both string and structured dict responses
+        if isinstance(response_result, dict):
+            response_text = response_result.get("response", "")
+            structured_data = response_result.get("data")
+        else:
+            response_text = response_result
+            structured_data = None
 
         # ✅ Log the answer preview here too
         preview = response_text.replace("\n", " ")[:200]
         logger.info(f"[rid={rid}] /ask-direct answer: {preview}")
 
         logger.info(f"[rid={rid}] /ask-direct success; agent_used={agent_name}; len={len(response_text)}")
-        return AskResponse(response=response_text, agent_used=agent_name, status="success", request_id=rid)
+        return AskResponse(
+            response=response_text, 
+            agent_used=agent_name, 
+            status="success", 
+            request_id=rid,
+            data=structured_data
+        )
 
     except Exception as e:
         logger.error(f"[rid={rid}] /ask-direct error: {e}")

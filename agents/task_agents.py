@@ -111,26 +111,56 @@ class TaskAgent(AssistantAgent):
 
     # ---- Capabilities -------------------------------------------------------
 
-    async def _cap_add(self, description: str) -> str:
+    async def _cap_add(self, description: str):
         tasks = self._load()
         tasks.append(description)
         self._save(tasks)
-        return f"✅ Added task #{len(tasks)}: {description}"
+        
+        return {
+            "response": f"✅ Added task #{len(tasks)}: {description}",
+            "data": {
+                "task": {"number": len(tasks), "description": description},
+                "total_tasks": len(tasks)
+            }
+        }
 
-    async def _cap_list(self) -> str:
+    async def _cap_list(self):
         tasks = self._load()
+        
         if not tasks:
-            return "🗒️ Your to-do list is empty."
-        return "🗒️ To-Do List:\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(tasks))
+            return {
+                "response": "🗒️ Your to-do list is empty.",
+                "data": {"tasks": [], "total": 0}
+            }
+        
+        response_text = "🗒️ **To-Do List:**\n\n"
+        response_text += "\n".join(f"{i+1}. {t}" for i, t in enumerate(tasks))
+        
+        tasks_data = [{"number": i+1, "description": t} for i, t in enumerate(tasks)]
+        
+        return {
+            "response": response_text,
+            "data": {"tasks": tasks_data, "total": len(tasks)}
+        }
 
-    async def _cap_complete(self, number: int) -> str:
+    async def _cap_complete(self, number: int):
         tasks = self._load()
         idx = number - 1
         if idx < 0 or idx >= len(tasks):
-            return f"❌ Invalid task number: {number}."
+            return {
+                "response": f"❌ Invalid task number: {number}.",
+                "data": None
+            }
         done = tasks.pop(idx)
         self._save(tasks)
-        return f"✅ Completed task #{number}: {done}"
+        
+        return {
+            "response": f"✅ Completed task #{number}: {done}",
+            "data": {
+                "completed_task": {"number": number, "description": done},
+                "remaining_tasks": len(tasks)
+            }
+        }
 
     async def _cap_clear(self) -> str:
         self._save([])

@@ -13,6 +13,7 @@ import os
 import asyncio
 import aiohttp
 import logging
+from typing import Dict, Any
 
 from core.errors import (
     APIConnectionError,
@@ -61,9 +62,12 @@ class APIManager:
         self.stock_breaker = get_circuit_breaker("stock")
 
     @retry_with_backoff(max_retries=2, base_delay=1.0)
-    async def get_weather(self, city: str) -> str:
+    async def get_weather(self, city: str) -> Dict[str, Any]:
         """
         Fetch current weather for `city` from OpenWeatherMap.
+        
+        Returns:
+            Dict with 'response' (formatted text) and 'data' (structured weather info)
         
         Includes:
         - Retry with backoff on transient failures
@@ -97,13 +101,29 @@ class APIManager:
                         temp = data["main"]["temp"]
                         hum = data["main"]["humidity"]
                         feels = data["main"].get("feels_like", temp)
+                        wind_speed = data.get("wind", {}).get("speed", 0)
+                        condition_code = data["weather"][0]["id"]
                         
-                        return (
+                        response_text = (
                             f"🌤️ Weather in {city.title()}:\n"
                             f"• Condition: {desc}\n"
                             f"• Temperature: {temp}°C (feels like {feels}°C)\n"
                             f"• Humidity: {hum}%"
                         )
+                        
+                        return {
+                            "response": response_text,
+                            "data": {
+                                "city": city.title(),
+                                "description": desc,
+                                "temperature": temp,
+                                "feels_like": feels,
+                                "humidity": hum,
+                                "wind_speed": wind_speed,
+                                "condition_code": condition_code,
+                                "units": "metric"
+                            }
+                        }
                         
             except aiohttp.ClientConnectorError as e:
                 raise APIConnectionError(api_name="Weather", url=url)
@@ -111,9 +131,12 @@ class APIManager:
                 raise APITimeoutError(api_name="Weather", timeout=10)
 
     @retry_with_backoff(max_retries=2, base_delay=1.0)
-    async def get_news(self, topic: str, page_size: int = 5) -> str:
+    async def get_news(self, topic: str, page_size: int = 5) -> Dict[str, Any]:
         """
         Fetch latest news articles for `topic` from NewsAPI.
+        
+        Returns:
+            Dict with 'response' (formatted text) and 'data' (articles array)
         
         Includes retry and circuit breaker protection.
         """
@@ -141,17 +164,49 @@ class APIManager:
                             raise APIInvalidResponseError(api_name="News", response=msg)
                         
                         articles = data.get("articles", [])
+                        total_results = data.get("totalResults", 0)
+                        
                         if not articles:
-                            return f"ℹ️ No news articles found for '{topic}'."
+                            return {
+                                "response": f"ℹ️ No news articles found for '{topic}'.",
+                                "data": {
+                                    "articles": [],
+                                    "topic": topic,
+                                    "total_results": 0
+                                }
+                            }
                         
                         lines = []
+                        enriched_articles = []
                         for art in articles[:page_size]:
                             title = art.get("title", "No title")
                             source = art.get("source", {}).get("name", "Unknown")
                             url_link = art.get("url", "")
+                            published_at = art.get("publishedAt", "")
+                            author = art.get("author", "Unknown")
+                            description = art.get("description", "")
+                            
                             lines.append(f"• **{title}**\n  Source: {source}\n  {url_link}")
+                            enriched_articles.append({
+                                "title": title,
+                                "source": source,
+                                "url": url_link,
+                                "published_at": published_at,
+                                "author": author,
+                                "description": description
+                            })
                         
-                        return f"📰 Latest news on '{topic}':\n\n" + "\n\n".join(lines)
+                        response_text = f"📰 Latest news on '{topic}':\n\n" + "\n\n".join(lines)
+                        
+                        return {
+                            "response": response_text,
+                            "data": {
+                                "articles": enriched_articles,
+                                "topic": topic,
+                                "total_results": total_results,
+                                "returned_count": len(enriched_articles)
+                            }
+                        }
                         
             except aiohttp.ClientConnectorError:
                 raise APIConnectionError(api_name="News")
@@ -159,9 +214,12 @@ class APIManager:
                 raise APITimeoutError(api_name="News", timeout=10)
 
     @retry_with_backoff(max_retries=2, base_delay=1.0)
-    async def get_stock(self, symbol: str) -> str:
+    async def get_stock(self, symbol: str) -> Dict[str, Any]:
         """
         Fetch real-time stock quote for `symbol` from Alpha Vantage.
+        
+        Returns:
+            Dict with 'response' (formatted text) and 'data' (stock quote info)
         
         Includes retry and circuit breaker protection.
         """
@@ -194,22 +252,43 @@ class APIManager:
                         price = quote.get("05. price")
                         change = quote.get("09. change")
                         pct = quote.get("10. change percent")
+                        high = quote.get("03. high")
+                        low = quote.get("04. low")
+                        volume = quote.get("06. volume")
                         
                         if not price:
-                            return f"ℹ️ No data found for symbol '{symbol.upper()}'. Check if it's a valid ticker."
+                            return {
+                                "response": f"ℹ️ No data found for symbol '{symbol.upper()}'. Check if it's a valid ticker.",
+                                "data": None
+                            }
                         
                         # Determine trend emoji
                         try:
                             change_val = float(change)
                             trend = "📈" if change_val >= 0 else "📉"
                         except:
+                            change_val = 0
                             trend = "💹"
                         
-                        return (
+                        response_text = (
                             f"{trend} {symbol.upper()} Stock Quote:\n"
                             f"• Price: ${float(price):.2f}\n"
                             f"• Change: {change} ({pct})"
                         )
+                        
+                        return {
+                            "response": response_text,
+                            "data": {
+                                "symbol": symbol.upper(),
+                                "price": float(price),
+                                "change": float(change),
+                                "change_percent": pct,
+                                "high": float(high) if high else None,
+                                "low": float(low) if low else None,
+                                "volume": int(volume) if volume else None,
+                                "trend": "up" if change_val >= 0 else "down"
+                            }
+                        }
                         
             except aiohttp.ClientConnectorError:
                 raise APIConnectionError(api_name="Stock")

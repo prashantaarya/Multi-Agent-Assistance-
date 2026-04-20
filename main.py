@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from backend.api import router
+from core.database import init_db
 
 # -----------------------------------------------------------------------------
 # Logging setup
@@ -46,7 +47,26 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("GROQ_API_KEY required")
 
     logger.info("✅ Environment validated")
+    
+    # Initialize database (SQLite local mode)
+    try:
+        init_db()
+        logger.info("✅ Database initialized (SQLite)")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        raise RuntimeError(f"Database init failed: {e}")
+    
     logger.info("🎯 J.A.R.V.I.S is ready for requests")
+
+    # Telegram webhook info
+    tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    tg_webhook = os.getenv("TELEGRAM_WEBHOOK_URL", "")
+    if tg_token and tg_webhook:
+        logger.info(f"🤖 Telegram webhook configured: {tg_webhook}")
+        logger.info("   → Call POST /api/v1/telegram/set-webhook once to activate auto-reply")
+    elif tg_token:
+        logger.info("🤖 Telegram bot token found. Set TELEGRAM_WEBHOOK_URL to enable auto-reply mode.")
+        logger.info("   → Use ngrok: ngrok http 8000  then set TELEGRAM_WEBHOOK_URL in .env")
 
     yield
 
