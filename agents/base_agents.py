@@ -282,14 +282,20 @@ User: "show me details for job mock_001"
 User: "I applied to that ML Engineer job"
 {{"agent":"job","task":"Track application to ML Engineer position","capability":"job.track_application","inputs":{{"user_id":"default_user","job_id":"mock_003","status":"applied"}},"confidence":0.85,"fallback":null,"mode":"single","reasoning":"Log application → job agent"}}
 
+User: "find the job related to my resume only 5 jobs"
+{{"agent":"job","task":"Find jobs matching the user's resume (infer role from resume)","capability":"job.search","inputs":{{"query":"","num_results":5}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"job.search auto-detects the resume and infers the role — never ask the user for a title"}}
+
+User: "find jobs related to my resume"
+{{"agent":"job","task":"Find jobs matching the user's resume","capability":"job.search","inputs":{{"query":"","num_results":10}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"job.search infers the role from the resume"}}
+
 User: "review my resume and find relevant jobs"
-{{"agent":"resume","task":"Auto-detect resume then search for matching jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":"job","mode":"react","reasoning":"Multi-step: parse resume → find matching jobs (use react mode)"}}
+{{"agent":"job","task":"Find jobs matching the resume","capability":"job.search","inputs":{{"query":"","num_results":10}},"confidence":0.92,"fallback":null,"mode":"single","reasoning":"job.search auto-parses the resume internally and ranks results — no separate resume step needed"}}
 
 User: "find AI Engineer jobs for me"
-{{"agent":"resume","task":"Auto-detect resume then search AI Engineer jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.9,"fallback":"job","mode":"react","reasoning":"User wants jobs based on resume → auto-detect first, then search"}}
+{{"agent":"job","task":"Search AI Engineer jobs and rank against resume","capability":"job.search","inputs":{{"query":"AI Engineer","num_results":10}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Explicit role → job.search (auto-uses resume for ranking)"}}
 
 User: "help me find a new job"
-{{"agent":"resume","task":"Auto-detect resume and find relevant jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.9,"fallback":"job","mode":"react","reasoning":"Job search based on resume → parse first, then search and rank"}}
+{{"agent":"job","task":"Find jobs matching the user's resume","capability":"job.search","inputs":{{"query":"","num_results":10}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"job.search infers role from resume"}}
 
 ## EXAMPLES - CODE → CODE AGENT
 
@@ -347,6 +353,126 @@ def _looks_telegram_intent(text: str) -> bool:
         "notify on telegram",
     ]
     return any(term in lt for term in telegram_terms)
+
+
+# Deterministic job-intent detection. The LLM planner sometimes routes job
+# requests to the resume agent (which then refuses to call search_jobs).
+# This pre-route short-circuits straight to job.search.
+_JOB_INTENT_TERMS = (
+    "job", "jobs", "vacancy", "vacancies", "opening", "openings",
+    "hiring", "career", "careers", "position", "positions", "role",
+    "apply to", "looking for work", "find work", "naukri", "linkedin job",
+)
+_JOB_NEGATIVE_TERMS = (
+    "review my resume", "parse my resume", "show my resume",
+    "analyze my resume", "show my profile", "update my preferences",
+    "update my profile",
+)
+
+
+def _looks_job_intent(text: str) -> bool:
+    """True if the user clearly wants jobs (not just a resume review)."""
+    lt = (text or "").lower()
+    if any(neg in lt for neg in _JOB_NEGATIVE_TERMS):
+        return False
+    return any(term in lt for term in _JOB_INTENT_TERMS)
+
+
+def _parse_job_query(text: str) -> dict:
+    """
+    Extract (query, location, num_results) hints from a free-form job request.
+    Conservative: returns empty query when the user didn't name a role —
+    JobAgent.search_jobs will infer from the resume.
+    """
+    import re
+
+    raw = (text or "").strip()
+    lt = raw.lower()
+
+    # ── num_results ────────────────────────────────────────────────────────
+    num = 10
+    # "5 jobs", "5 results", "5 Python Developer jobs"
+    m = re.search(r"\b(\d{1,3})\s+\S+(?:\s+\S+){0,4}?\s+(?:jobs?|roles?|positions?|openings?|results?|listings?)\b", lt)
+    if not m:
+        m = re.search(r"\b(\d{1,3})\s+(?:jobs?|roles?|positions?|openings?|results?|listings?)\b", lt)
+    if not m:
+        m = re.search(r"\bonly\s+(\d{1,3})\b", lt)
+    if not m:
+        m = re.search(r"\btop\s+(\d{1,3})\b", lt)
+    if m:
+        try:
+            num = max(1, min(int(m.group(1)), 50))
+        except ValueError:
+            pass
+
+    # ── location ───────────────────────────────────────────────────────────
+    location = ""
+    # Stop on common terminators / end of string
+    m = re.search(
+        r"\bin\s+([A-Za-z][\w\s,.-]*?)(?:\s+(?:and|or|with|for|that|which|using|on|at|near|using|please|kindly)\b|[.?!]|$)",
+        raw,
+        re.I,
+    )
+    if m:
+        location = m.group(1).strip(" ,.\t\n")
+        # Reject obviously non-location words
+        if location.lower() in {"my resume", "my profile", "the role"} or len(location) > 50:
+            location = ""
+
+    # ── query ──────────────────────────────────────────────────────────────
+    # Resume-driven phrases → leave query empty for inference.
+    vague_resume = (
+        "related to my resume", "based on my resume", "from my resume",
+        "matching my resume", "match my resume",
+        "matching my profile", "based on my profile", "for my profile",
+    )
+    if any(v in lt for v in vague_resume):
+        return {"query": "", "location": location, "num_results": num}
+
+    # Generic "find work" / "find a job" / "help me find a job" → empty
+    generic_phrases = (
+        "find work", "find a job", "find me a job", "looking for a job",
+        "help me find a job", "i want to find a job", "i need a job",
+        "find job", "find me job", "find some jobs", "find me some jobs",
+    )
+    if any(p in lt for p in generic_phrases) and not re.search(r"\bin\s+\w", lt):
+        return {"query": "", "location": location, "num_results": num}
+
+    # Try to pull a role from "find <role> jobs"
+    m = re.search(r"\bfind\s+(?:me\s+)?(.+?)\s+jobs?\b", raw, re.I)
+    role = ""
+    if m:
+        role = m.group(1).strip()
+        # Strip leading count + adjectives (counts, "only N", "top N")
+        role = re.sub(r"^\d+\s+", "", role).strip()
+        role = re.sub(
+            r"^(?:only|top|just|any|some|the|a|an|all|more|few|several)\s+",
+            "",
+            role,
+            flags=re.I,
+        ).strip()
+        # Strip generic temporal/quality adjectives that aren't actual roles
+        role = re.sub(
+            r"^(?:latest|new|newest|recent|fresh|current|best|good|great|hot|trending|available|open)\s+",
+            "",
+            role,
+            flags=re.I,
+        ).strip()
+        # Strip any trailing count token, e.g. "10" left over from "latest 10 jobs"
+        role = re.sub(r"^\d+\s*$", "", role).strip()
+        role = re.sub(r"\s+\d+$", "", role).strip()
+        # Words that on their own are NOT a role — treat as "infer from resume"
+        GENERIC_NON_ROLES = {
+            "", "job", "jobs", "work", "role", "roles", "position", "positions",
+            "opening", "openings", "vacancy", "vacancies", "opportunity",
+            "opportunities", "career", "careers", "latest", "new", "recent",
+            "best", "good", "any", "some", "more", "available", "open",
+        }
+        if role.lower() in GENERIC_NON_ROLES or len(role) < 2:
+            role = ""
+
+    return {"query": role, "location": location, "num_results": num}
+
 
 # Agent registry (by name) for reference/diagnostics; routing uses capabilities
 AGENTS = {
@@ -492,6 +618,26 @@ class JARVISAssistant:
         # Start request trace
         tracer.start_request(message)
 
+        # ── FAST-PATH: deterministic job-intent override ───────────────────
+        # The LLM planner sometimes routes job requests to resume agent which
+        # then refuses to actually search. Short-circuit straight to job.search.
+        if _looks_job_intent(message):
+            hints = _parse_job_query(message)
+            try:
+                from core.capabilities import resolve as _resolve_cap
+                resolved = _resolve_cap("job.search")
+                if resolved is not None:
+                    _, handler = resolved
+                    tracer.route(
+                        "orchestrator",
+                        f"⚡ Fast-route to job.search (job intent) hints={hints}",
+                    )
+                    result = await handler(**hints)
+                    if isinstance(result, dict) and result.get("response"):
+                        return result["response"]
+            except Exception as ex:
+                tracer.thought("job", f"Fast-route failed, falling back to planner: {ex}")
+
         # 1) Ask the Planner — fresh agent every call to avoid history bleed
         tracer.thought("planner", f"Analyzing user query: '{message[:60]}...'")
         with tracer.span("planner.call", message_preview=message[:60]):
@@ -558,7 +704,26 @@ class JARVISAssistant:
         agent_name = raw.get("agent")
         agent_task = raw.get("task", message)
         router = get_router()
-        
+
+        # ── Safety override: if user clearly wants jobs, force job agent ───
+        # Prevents planner from sending job queries to resume.auto_detect.
+        if _looks_job_intent(message) and agent_name != "job":
+            tracer.route(
+                "orchestrator",
+                f"⚠️ Planner picked '{agent_name}' but user asked for jobs — overriding to job.search",
+            )
+            try:
+                from core.capabilities import resolve as _resolve_cap
+                resolved = _resolve_cap("job.search")
+                if resolved is not None:
+                    _, handler = resolved
+                    hints = _parse_job_query(message)
+                    result = await handler(**hints)
+                    if isinstance(result, dict) and result.get("response"):
+                        return result["response"]
+            except Exception as ex:
+                tracer.thought("job", f"Job override failed: {ex}")
+
         # If planner specified an agent, route to it
         if agent_name:
             domain_agent = router.get_agent(agent_name)

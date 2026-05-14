@@ -33,6 +33,11 @@ PyPDF2>=3.0.0           # PDF parsing for resumes
 python-docx>=1.0.0      # DOCX parsing for resumes
 # serpapi>=0.1.5        # Optional: Google Jobs search (100 free/month, works in mock mode without)
 
+# ── Production Job Scraping & Auto-Apply (Playwright stack) ───────────────────
+playwright>=1.59.0          # Async browser automation for real job scraping
+playwright-stealth>=2.0.0   # Anti-detection (webdriver flag, navigator spoofing)
+tenacity>=8.0.0             # Retry with exponential backoff for flaky network calls
+
 # ── Development / testing (optional) ─────────────────────────────────────────
 pytest>=7.0.0
 pytest-asyncio>=0.21.0

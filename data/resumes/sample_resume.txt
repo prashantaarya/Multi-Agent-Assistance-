@@ -1,67 +1,61 @@
-Rahul Kumar
-Senior Python Developer
-
-Contact:
-Email: rahul.kumar@example.com
-Phone: +91-9876543210
-Location: Delhi, India
-LinkedIn: linkedin.com/in/rahulkumar
-GitHub: github.com/rahulkumar
-
-PROFESSIONAL SUMMARY
-Experienced software engineer with 4 years of expertise in backend development, API design, and cloud infrastructure. Skilled in Python, FastAPI, Docker, and AWS. Passionate about building scalable systems and working with LLMs and AI agents.
-
-TECHNICAL SKILLS
-Languages: Python, JavaScript, SQL, Bash
-Frameworks: FastAPI, Django, Flask, React, Node.js
-Databases: PostgreSQL, MongoDB, Redis
-Cloud & DevOps: AWS, Docker, Kubernetes, Terraform, CI/CD
-AI/ML: LLM, AutoGen, PyTorch, TensorFlow, NLP
-Tools: Git, Jenkins, GitHub Actions, Elasticsearch
-
-WORK EXPERIENCE
-
-Senior Backend Developer | TechCorp India | Jan 2022 - Present (2.5 years)
-- Built RESTful APIs using FastAPI serving 100K+ daily users
-- Designed microservices architecture with Docker and Kubernetes
-- Implemented LLM-powered chatbot using OpenAI and AutoGen
-- Reduced API response time by 40% through optimization
-- Mentored 3 junior developers
-
-Backend Engineer | StartupXYZ | July 2020 - Dec 2021 (1.5 years)
-- Developed backend services using Python Django and PostgreSQL
-- Integrated payment gateways and third-party APIs
-- Managed AWS infrastructure (EC2, S3, RDS, Lambda)
-- Implemented CI/CD pipelines with Jenkins and GitHub Actions
-- Worked in Agile/Scrum environment
-
-EDUCATION
-
-B.Tech in Computer Science
-Delhi Technological University | 2016 - 2020
-CGPA: 8.5/10
-
+Prashant Aarya - AI Engineer Email: prashantaarya005@gmail.com LinkedIn: https://www.linkedin.com/in/prashant-aarya23 Mobile: +91-7979022486
+GitHub: https://github.com/prashantaarya?tab=repositories
+PROFILE SUMMARY
+AI Engineer with 2+ years of experience across Generative AI, LLMs, NLP, and ML/DL, designing and deploying production LLM applications, RAG pipelines, and multi-agent systems. Led the design and deployment of MYA, an enterprise multi-agent chatbot used by 80,000+ Bosch employees, plus HR automation and analytics solutions using Python, FastAPI, Azure, LangChain/LangGraph, AutoGen, and LLM fine-tuning (QLoRA, PEFT).
+SKILLS SUMMARY
+•
+Generative & Agentic AI: LLM applications (Llama 3.1, Azure OpenAI), Multi-Agent systems (LangGraph, LangChain, AutoGen, CrewAI), RAG, LLM fine-tuning (QLoRA, PEFT), prompt engineering, Hugging Face.
+•
+ML / DL & NLP: Classical ML/DL, NLP, TensorFlow, PyTorch, Scikit-learn, spaCy, NLTK, BERTopic, Transformers.
+•
+Cloud & MLOps: Azure Cloud (Azure AI Foundry), Docker, Git, MLflow, vector databases (ChromaDB, FAISS).
+•
+Languages & Tools: Python, Java, JavaScript, FastAPI, REST APIs, SQL (MySQL, PostgreSQL), Vue.js.
+EXPERIENCE
+Bosch Global Software Technologies Hyderabad, India
+AI Engineer (Full-time) Jan 2024 – Present
+•
+Designed and led end-to-end architecture and deployment of MYA, an enterprise GenAI multi-agent LLM chatbot serving 80,000+ employees, using FastAPI, Azure OpenAI, asynchronous microservices, and secure SSO (Azure Entra ID).
+•
+Architected and owned a scalable multi-agent orchestration framework with intelligent intent routing, guarded tool/action execution, automated workflows, and enterprise-grade reliability and safety controls.
+•
+Built a FastAPI backend orchestrating a LangGraph-style RAG pipeline (query understanding → retrieval → generation) using Azure OpenAI LLM models, multilingual query preprocessing (language detection and procurement abbreviation expansion), and structured JSON outputs (answers, citations, quality flags).
+•
+Led the development and deployment of an internal AI-powered web app (FastAPI, Azure, GenAI, LangChain) for HR workflow automation, cutting manual effort by 80% and turnaround time by 75% across teams.
+•
+Led multilingual sentiment and topic analysis using BERTopic, Azure OpenAI, spaCy, and NLTK, delivering actionable workplace insights that reduced HR survey analysis time by 90% and improved employee satisfaction.
+•
+Developed and maintained a time-series forecasting pipeline (Pandas, Nixtla), boosting order line forecast accuracy by 15% while automating data workflows for faster business decisions.
+Microsoft Remote
+Future Ready Talent – AI Intern Dec 2021 – Mar 2022
+•
+Built an AI-powered COVID-19 conversational chatbot using Microsoft Bot Framework, WHO API, and Azure, delivering real-time information via Telegram.
+•
+Designed multi-turn conversational flows and NLP-based intent handling with real-time data integration, collaborating with Microsoft ML/AI experts to meet production-readiness standards.
 PROJECTS
-
-J.A.R.V.I.S. Multi-Agent System (2026)
-- Built intelligent multi-agent system using AutoGen v0.4
-- Integrated Gmail, Calendar, Telegram, and API agents
-- Implemented ReAct pattern with LLM reasoning
-- Technologies: Python, FastAPI, Groq API, AutoGen
-
-E-Commerce Platform (2021)
-- Full-stack web application with React frontend and Django backend
-- Payment integration with Razorpay
-- Deployed on AWS with Docker
-- Technologies: React, Django, PostgreSQL, AWS
-
-CERTIFICATIONS
-- AWS Certified Solutions Architect - Associate (2023)
-- Machine Learning Specialization - Coursera (2022)
-
-LANGUAGES
-- English (Fluent)
-- Hindi (Native)
-
-INTERESTS
-Building AI agents, Open source contribution, Reading tech blogs
+•
+Multi-Agent AI Sales Assistant (Freelance Project) | GitHub Repository
+•
+Developed a multi-agent sales intelligence platform (Python, LangChain, LangGraph) to automate B2B prospecting with personalized insights and dynamic communication.
+•
+Implemented a hybrid AI architecture combining Groq LLM with deterministic Python logic for data filtering, scoring, and SWOT analysis.
+•
+Built a CRM pipeline (Pandas) with SEO/Social scoring, hybrid search tools, and a Streamlit chat interface with real-time monitoring and visual analytics.
+•
+Multi-Agent AI Travel Planner | LangGraph, Groq LLaMA 3.3, FastAPI, Streamlit | GitHub Repository
+•
+Personalized Itinerary Generation: Built a multi-agent AI travel planner using LangGraph agents and Groq LLaMA 3.3 to generate multi-day itineraries based on user preferences, budget, and group type.
+•
+Modular Architecture and UX: Designed a Python FastAPI backend with strong state management and input validation, and a Streamlit frontend for interactive itinerary creation and accommodation recommendations.
+ACHIEVEMENTS
+•
+Microsoft Certified: Azure AI Engineer Associate – designing and deploying Azure AI solutions and agents using Azure Cognitive Services, Azure OpenAI, and Azure ML for NLP, computer vision, and generative AI. View Credential
+•
+Microsoft Certified: Azure Data Scientist Associate (DP-100) – Azure Machine Learning for data prep/exploration, model training, ML pipelines/jobs, deployment & monitoring, and MLflow experiment tracking and AI apps using Azure AI services. View Credential
+•
+Published Paper: Design of Intelligent Box for Pharmaceutical Assistance for Senior Citizens, ICONIC 2023.
+•
+Winner, Innovation Mission Punjab MIC (2023): healthcare solution assisting senior citizens with medication reminders and health monitoring.
+EDUCATION
+•
+Bachelor of Technology – Electronics and Communication Engineering | GPA: 7.1 Punjab, India Lovely Professional University July 2019 - july 2023

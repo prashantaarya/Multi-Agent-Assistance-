@@ -92,88 +92,123 @@ class ResumeParser:
     def extract_structured_data(self, resume_text: str, llm_client=None) -> Dict[str, Any]:
         """
         Use LLM to extract structured data from resume text.
-        
+
         Returns:
-            Dict with: personal, skills, experience, education, preferences
+            Dict with: personal, skills, experience, education, certifications, projects
         """
-        if not llm_client:
-            # Return mock data if no LLM available (for testing)
-            return self._mock_extraction(resume_text)
-        
         # LLM prompt for structured extraction
-        extraction_prompt = f"""
-Extract structured information from this resume and return ONLY valid JSON (no markdown, no code blocks):
+        extraction_prompt = (
+            "Extract structured information from this resume and return ONLY valid JSON "
+            "(no markdown, no code blocks, no commentary).\n\n"
+            f"RESUME:\n{resume_text}\n\n"
+            "Return this EXACT JSON structure (use null for missing fields):\n"
+            "{\n"
+            '  "personal": {"name": "Full Name", "email": "...", "phone": "...", '
+            '"location": "City, State", "linkedin": "...", "github": "..."},\n'
+            '  "summary": "Brief professional summary in 1-2 sentences",\n'
+            '  "skills": ["Skill1", "Skill2"],\n'
+            '  "experience": [{"company": "...", "role": "...", "duration": "...", '
+            '"years": 2.5, "domain": "...", "description": "..."}],\n'
+            '  "education": [{"degree": "...", "field": "...", "institution": "...", '
+            '"year": 2020, "grade": "..."}],\n'
+            '  "projects": [{"name": "...", "description": "...", "technologies": ["..."]}],\n'
+            '  "certifications": ["..."],\n'
+            '  "languages": ["..."]\n'
+            "}\n\n"
+            "RULES:\n"
+            "- Extract the candidate's REAL name from the very top of the resume.\n"
+            "- Put work history in `experience` sorted MOST RECENT FIRST.\n"
+            "- For `years`, estimate decimal years for each role.\n"
+            "- Extract every skill mentioned (not just popular ones).\n"
+            "- Return ONLY JSON. No prose, no markdown fences."
+        )
 
-{resume_text}
+        # ── Try direct Groq HTTP call first (most reliable) ────────────────
+        result = self._call_groq_llm(extraction_prompt)
+        if result is not None:
+            return result
 
-Return this exact JSON structure:
-{{
-  "personal": {{
-    "name": "Full Name",
-    "email": "email@example.com",
-    "phone": "+91-XXXXXXXXXX",
-    "location": "City, State",
-    "linkedin": "linkedin.com/in/username",
-    "github": "github.com/username"
-  }},
-  "summary": "Brief professional summary",
-  "skills": ["Skill1", "Skill2", "Skill3"],
-  "experience": [
-    {{
-      "company": "Company Name",
-      "role": "Job Title",
-      "duration": "Jan 2020 - Present",
-      "years": 2.5,
-      "domain": "Industry/Domain",
-      "description": "Brief role description"
-    }}
-  ],
-  "education": [
-    {{
-      "degree": "B.Tech/M.Tech/etc",
-      "field": "Computer Science",
-      "institution": "University Name",
-      "year": 2020,
-      "grade": "8.5 CGPA"
-    }}
-  ],
-  "projects": [
-    {{
-      "name": "Project Name",
-      "description": "What it does",
-      "technologies": ["Tech1", "Tech2"]
-    }}
-  ],
-  "certifications": ["Cert1", "Cert2"],
-  "languages": ["English", "Hindi"]
-}}
+        # ── Try the passed-in autogen client as a fallback ─────────────────
+        if llm_client is not None:
+            try:
+                response = llm_client.create(
+                    messages=[{"role": "user", "content": extraction_prompt}],
+                    temperature=0.2,
+                    max_tokens=2000,
+                )
+                text = response.choices[0].message.content.strip()
+                return self._parse_json_response(text)
+            except Exception as e:
+                logger.warning(f"autogen llm_client.create failed: {e}")
 
-Extract all available information. Use null for missing fields. Return ONLY JSON.
-"""
-        
+        # ── Final fallback: heuristic mock extraction ──────────────────────
+        logger.warning("LLM extraction unavailable — falling back to heuristic parser")
+        return self._mock_extraction(resume_text)
+
+    def _call_groq_llm(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Direct Groq Chat Completions call. Returns parsed JSON or None."""
+        import os
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return None
         try:
-            # Call LLM (assuming Groq/OpenAI-compatible client)
-            response = llm_client.create(
-                messages=[{"role": "user", "content": extraction_prompt}],
-                temperature=0.3,
-                max_tokens=2000
+            import httpx
+            model = os.getenv("GROQ_RESUME_MODEL") or os.getenv(
+                "GROQ_MODEL", "openai/gpt-oss-120b"
             )
-            
-            # Parse JSON from response
-            result_text = response.choices[0].message.content.strip()
-            
-            # Remove markdown code blocks if present
-            if result_text.startswith("```"):
-                result_text = result_text.split("```")[1]
-                if result_text.startswith("json"):
-                    result_text = result_text[4:]
-            
-            return json.loads(result_text)
-            
+            with httpx.Client(timeout=60) as client:
+                resp = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are a precise resume parser. Output ONLY a single valid JSON "
+                                    "object. No prose, no markdown fences, no commentary."
+                                ),
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 3000,
+                    },
+                )
+            if resp.status_code != 200:
+                logger.warning("Groq resume extraction HTTP %s: %s", resp.status_code, resp.text[:300])
+                return None
+            text = resp.json()["choices"][0]["message"]["content"]
+            return self._parse_json_response(text)
         except Exception as e:
-            logger.error(f"LLM extraction failed: {e}")
-            return self._mock_extraction(resume_text)
-    
+            logger.warning(f"Groq direct call failed: {e}")
+            return None
+
+    def _parse_json_response(self, text: str) -> Optional[Dict[str, Any]]:
+        """Strip code fences and parse JSON. Returns None on failure."""
+        if not text:
+            return None
+        t = text.strip()
+        if t.startswith("```"):
+            # Remove ```json ... ``` fences
+            t = t.strip("`")
+            if t.lower().startswith("json"):
+                t = t[4:]
+            t = t.strip()
+        # Find outermost JSON object
+        s, e = t.find("{"), t.rfind("}")
+        if s == -1 or e == -1 or e <= s:
+            return None
+        try:
+            return json.loads(t[s : e + 1])
+        except Exception as ex:
+            logger.warning(f"Failed to parse LLM JSON: {ex}")
+            return None
+
     def _mock_extraction(self, resume_text: str) -> Dict[str, Any]:
         """
         Mock extraction for testing without LLM.

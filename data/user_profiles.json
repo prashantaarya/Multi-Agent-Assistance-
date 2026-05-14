@@ -1,163 +1,124 @@
 {
-  "test_user": {
-    "personal": {
-      "name": "Rahul Kumar",
-      "email": "rahul.kumar@example.com",
-      "phone": "+91-9876543210",
-      "location": "Not specified",
-      "linkedin": null,
-      "github": null
-    },
-    "summary": "Professional with experience in software development",
-    "skills": [
-      "Python",
-      "Java",
-      "JavaScript",
-      "SQL",
-      "React",
-      "Node.js",
-      "FastAPI",
-      "Django",
-      "Flask",
-      "PostgreSQL",
-      "MongoDB",
-      "Docker",
-      "Kubernetes",
-      "AWS",
-      "Git"
-    ],
-    "experience": [
-      {
-        "company": "Previous Company",
-        "role": "Software Developer",
-        "duration": "2020 - Present",
-        "years": 3,
-        "domain": "Software Development",
-        "description": "Worked on various projects"
-      }
-    ],
-    "education": [
-      {
-        "degree": "Bachelor's Degree",
-        "field": "Computer Science",
-        "institution": "University",
-        "year": 2020,
-        "grade": "N/A"
-      }
-    ],
-    "projects": [],
-    "certifications": [],
-    "languages": [
-      "English"
-    ],
-    "user_id": "test_user",
-    "updated_at": "2026-04-20T00:00:00Z"
-  },
-  "workflow_user": {
-    "personal": {
-      "name": "Rahul Kumar",
-      "email": "rahul.kumar@example.com",
-      "phone": "+91-9876543210",
-      "location": "Not specified",
-      "linkedin": null,
-      "github": null
-    },
-    "summary": "Professional with experience in software development",
-    "skills": [
-      "Python",
-      "Java",
-      "JavaScript",
-      "SQL",
-      "React",
-      "Node.js",
-      "FastAPI",
-      "Django",
-      "Flask",
-      "PostgreSQL",
-      "MongoDB",
-      "Docker",
-      "Kubernetes",
-      "AWS",
-      "Git"
-    ],
-    "experience": [
-      {
-        "company": "Previous Company",
-        "role": "Software Developer",
-        "duration": "2020 - Present",
-        "years": 3,
-        "domain": "Software Development",
-        "description": "Worked on various projects"
-      }
-    ],
-    "education": [
-      {
-        "degree": "Bachelor's Degree",
-        "field": "Computer Science",
-        "institution": "University",
-        "year": 2020,
-        "grade": "N/A"
-      }
-    ],
-    "projects": [],
-    "certifications": [],
-    "languages": [
-      "English"
-    ],
-    "user_id": "workflow_user",
-    "updated_at": "2026-04-20T00:00:00Z"
-  },
   "default_user": {
     "personal": {
-      "name": "Rahul Kumar",
-      "email": "rahul.kumar@example.com",
-      "phone": "+91-9876543210",
-      "location": "Not specified",
-      "linkedin": null,
-      "github": null
+      "name": "Prashant Aarya",
+      "email": "prashantaarya005@gmail.com",
+      "phone": "+91-7979022486",
+      "location": null,
+      "linkedin": "https://www.linkedin.com/in/prashant-aarya23",
+      "github": "https://github.com/prashantaarya?tab=repositories"
     },
-    "summary": "Professional with experience in software development",
+    "summary": "AI Engineer with over 2 years of experience designing and deploying generative AI, LLM, RAG, and multi‑agent solutions, including an enterprise chatbot used by 80,000+ Bosch employees.",
     "skills": [
+      "Generative AI",
+      "Large Language Models (LLM)",
+      "LLM applications",
+      "Llama 3.1",
+      "Azure OpenAI",
+      "Multi-Agent systems",
+      "LangGraph",
+      "LangChain",
+      "AutoGen",
+      "CrewAI",
+      "Retrieval Augmented Generation (RAG)",
+      "LLM fine-tuning",
+      "QLoRA",
+      "PEFT",
+      "Prompt engineering",
+      "Hugging Face",
+      "Classical Machine Learning",
+      "Deep Learning",
+      "NLP",
+      "TensorFlow",
+      "PyTorch",
+      "Scikit-learn",
+      "spaCy",
+      "NLTK",
+      "BERTopic",
+      "Transformers",
+      "Azure Cloud",
+      "Azure AI Foundry",
+      "Docker",
+      "Git",
+      "MLflow",
+      "Vector databases",
+      "ChromaDB",
+      "FAISS",
       "Python",
       "Java",
       "JavaScript",
-      "SQL",
-      "React",
-      "Node.js",
       "FastAPI",
-      "Django",
-      "Flask",
+      "REST APIs",
+      "SQL",
+      "MySQL",
       "PostgreSQL",
-      "MongoDB",
-      "Docker",
-      "Kubernetes",
-      "AWS",
-      "Git"
+      "Vue.js",
+      "Pandas",
+      "Nixtla",
+      "Streamlit",
+      "Microsoft Bot Framework",
+      "WHO API",
+      "Telegram",
+      "Groq LLM",
+      "Groq LLaMA 3.3"
     ],
     "experience": [
       {
-        "company": "Previous Company",
-        "role": "Software Developer",
-        "duration": "2020 - Present",
-        "years": 3,
-        "domain": "Software Development",
-        "description": "Worked on various projects"
+        "company": "Bosch Global Software Technologies",
+        "role": "AI Engineer",
+        "duration": "Jan 2024 – Present",
+        "years": 2.4,
+        "domain": "Artificial Intelligence / Generative AI",
+        "description": "Designed and led the architecture and deployment of MYA, an enterprise GenAI multi‑agent chatbot serving 80,000+ employees using FastAPI, Azure OpenAI, and asynchronous microservices with Azure Entra ID SSO. Built a scalable multi‑agent orchestration framework with intent routing, guarded tool execution, and safety controls. Developed a LangGraph‑style RAG pipeline with multilingual preprocessing and structured JSON outputs. Delivered an internal AI‑powered HR workflow automation app reducing manual effort by 80% and turnaround time by 75%. Conducted multilingual sentiment and topic analysis with BERTopic, spaCy and NLTK, cutting survey analysis time by 90%. Implemented a time‑series forecasting pipeline with Pandas and Nixtla, improving forecast accuracy by 15%."
+      },
+      {
+        "company": "Microsoft",
+        "role": "Future Ready Talent – AI Intern",
+        "duration": "Dec 2021 – Mar 2022",
+        "years": 0.3,
+        "domain": "Artificial Intelligence",
+        "description": "Built an AI‑powered COVID‑19 conversational chatbot using Microsoft Bot Framework, WHO API, and Azure, delivering real‑time information via Telegram. Designed multi‑turn conversational flows and NLP‑based intent handling, collaborating with Microsoft ML/AI experts to meet production‑readiness standards."
       }
     ],
     "education": [
       {
-        "degree": "Bachelor's Degree",
-        "field": "Computer Science",
-        "institution": "University",
-        "year": 2020,
-        "grade": "N/A"
+        "degree": "Bachelor of Technology",
+        "field": "Electronics and Communication Engineering",
+        "institution": "Lovely Professional University",
+        "year": 2023,
+        "grade": "GPA 7.1"
       }
     ],
-    "projects": [],
-    "certifications": [],
-    "languages": [
-      "English"
+    "projects": [
+      {
+        "name": "Multi-Agent AI Sales Assistant",
+        "description": "Developed a multi‑agent sales intelligence platform that automates B2B prospecting with personalized insights, using a hybrid AI architecture that combines a Groq LLM with deterministic Python logic for data filtering, scoring, and SWOT analysis. Implemented a CRM pipeline with SEO/social scoring, hybrid search tools, and a Streamlit chat interface for real‑time monitoring and visual analytics.",
+        "technologies": [
+          "Python",
+          "LangChain",
+          "LangGraph",
+          "Groq LLM",
+          "Pandas",
+          "Streamlit"
+        ]
+      },
+      {
+        "name": "Multi-Agent AI Travel Planner",
+        "description": "Built a multi‑agent travel planner that generates personalized itineraries based on user preferences, budget, and group type using LangGraph agents and Groq LLaMA 3.3. Designed a FastAPI backend with robust state management and input validation, and a Streamlit frontend for interactive itinerary creation and accommodation recommendations.",
+        "technologies": [
+          "Python",
+          "FastAPI",
+          "LangGraph",
+          "Groq LLaMA 3.3",
+          "Streamlit"
+        ]
+      }
     ],
+    "certifications": [
+      "Microsoft Certified: Azure AI Engineer Associate",
+      "Microsoft Certified: Azure Data Scientist Associate (DP-100)"
+    ],
+    "languages": [],
     "user_id": "default_user",
     "updated_at": "2026-04-20T00:00:00Z"
   }

@@ -1019,115 +1019,129 @@ When analyzing job fit:
     # 9. JOB AGENT - Job search and matching expert
     # ══════════════════════════════════════════════════════════════════════════
     
-    JOB_SYSTEM_PROMPT = """You are the Job Agent — an expert at finding and matching job opportunities.
+    JOB_SYSTEM_PROMPT = """You are the Job Agent — an expert at finding, ranking, and applying to jobs.
 
 ## 🚨 CRITICAL UNDERSTANDING 🚨
 
-You do NOT have any job data stored. You do NOT have access to any job listings.
-The ONLY way to get job data is to call the search_jobs tool.
+You have NO job data in your memory. The ONLY way to obtain jobs is to call the
+`search_jobs` tool. NEVER invent companies, URLs, salaries, or job descriptions.
 
-## 🎯 SMART JOB SEARCH WORKFLOW
+## 🛠 YOUR TOOLS
 
-**IMPORTANT:** The search_jobs tool is SMART! When you call it, it automatically:
-1. Looks for user's resume in data/resumes/ folder
-2. Parses it to extract their skills and experience
-3. Searches for matching jobs
-4. Ranks jobs by match score to their profile
-5. Returns personalized results
+1. `search_jobs` — Multi-source Playwright scraper (LinkedIn + Naukri + Indeed).
+   - Auto-detects the user's resume in `data/resumes/`
+   - Auto-parses skills/experience/location
+   - Scrapes all sources in PARALLEL
+   - Deduplicates across sources by (company, title)
+   - EXCLUDES jobs the user already applied to (via ApplicationTracker)
+   - Ranks results by match score (skills 60% + experience 30% + location 10%)
+   - Falls back to legacy SerpAPI / mock if scrapers all fail
 
-So when user says: **"find AI Engineer jobs in Bangalore"**
+2. `rank_jobs` — Re-rank a saved list against the user's profile.
 
-**YOU MUST RESPOND WITH:**
+3. `auto_apply` — Auto-apply to selected jobs via browser automation.
+   - Required arg: `job_ids` (list of IDs from a previous `search_jobs` call)
+   - Optional: `mode` = `auto` | `semi-auto` (default) | `review` | `dry-run`
+   - Optional: `min_match_score` (skip jobs below this %)
+
+4. `list_applications` — Show prior applications with statuses.
+
+5. `track_application` — Manually log an external application.
+
+6. `get_job_details` — Fetch full details for a single job_id.
+
+## ✅ CORRECT WORKFLOWS
+
+### Workflow A — Search only
+User: "find AI Engineer jobs in Bangalore"
+Step 1:
 {
-  "thought": "I need to call search_jobs. It will auto-detect the user's resume and find matching jobs.",
+  "thought": "Call search_jobs; it auto-parses the resume and ranks results.",
   "tool": "search_jobs",
   "tool_inputs": {"query": "AI Engineer", "location": "Bangalore", "num_results": 10},
   "is_final": false
 }
-
-**NEVER RESPOND WITH:**
+Step 2 (after tool returns):
 {
-  "thought": "I have all the information needed",
-  "tool": null,
-  "answer": "Found 10 AI Engineer jobs..."  ← THIS IS WRONG! You have NO data!
+  "thought": "I have real job data with match scores; present to user.",
+  "tool": null, "tool_inputs": {},
+  "is_final": true,
+  "answer": "<format the REAL data from the tool>"
 }
 
-## ⚠️ ANTI-HALLUCINATION RULES ⚠️
-
-**IMPOSSIBLE ACTIONS (You cannot do these):**
-- Present job listings without calling search_jobs first
-- Know which companies are hiring without calling search_jobs
-- Provide job URLs without calling search_jobs
-- Give salary information without calling search_jobs
-- Know user's resume details without calling the tool (it handles that)
-
-**MANDATORY ACTIONS (You must do these):**
-- When user says "find jobs" → Call search_jobs immediately
-- When user says "search jobs" → Call search_jobs immediately
-- Wait for tool response before presenting any job data
-- Use ONLY the data returned by the tool
-- Trust the tool to handle resume parsing and matching
-
-## CORRECT WORKFLOW EXAMPLE
-
-**User Request:** "find Python developer jobs in Delhi"
-
-**Step 1 - Your Response:**
+### Workflow B — Search + auto-apply
+User: "find AI Engineer jobs in Bangalore and apply to the top 3"
+Step 1: Call `search_jobs` (same as above).
+Step 2: Extract top 3 job_ids from the tool result. Then:
 {
-  "thought": "User wants Python jobs in Delhi. I'll call search_jobs which will auto-detect their resume and match jobs to their profile.",
+  "thought": "Apply to top 3 via semi-auto (safe default).",
+  "tool": "auto_apply",
+  "tool_inputs": {
+    "job_ids": ["<id1>", "<id2>", "<id3>"],
+    "mode": "semi-auto",
+    "min_match_score": 70
+  },
+  "is_final": false
+}
+Step 3: Present the auto_apply results to the user.
+
+### Workflow C — Show my applications
+User: "show my applications"
+{
+  "tool": "list_applications", "tool_inputs": {"limit": 20}, "is_final": false, ...
+}
+
+### Workflow D — Resume-based search (NO ROLE GIVEN)
+User: "find jobs related to my resume" / "find 5 jobs for me" / "help me find a job"
+{
+  "thought": "User did not specify a role. Call search_jobs with empty query — the tool infers role from resume.",
   "tool": "search_jobs",
-  "tool_inputs": {"query": "Python developer", "location": "Delhi", "num_results": 10},
+  "tool_inputs": {"query": "", "num_results": 5},
   "is_final": false
 }
 
-**Step 2 - After receiving tool results:**
-{
-  "thought": "search_jobs found 10 jobs matched to the user's profile with scores. I can now present these results.",
-  "tool": null,
-  "tool_inputs": {},
-  "is_final": true,
-  "answer": "🔍 Found 10 Python developer jobs in Delhi matched to your resume!\\n\\n[Present the ACTUAL data from tool including match scores]"
-}
+## 🛑 NEVER DO
 
-## YOUR TOOLS
-- search_jobs: **SMART** search - auto-detects resume, searches jobs, ranks by match score
-- rank_jobs: Manually rank specific jobs (usually search_jobs does this automatically)
-- get_job_details: Get full details for a specific job
-- track_application: Log a job application
+- Do NOT fabricate job listings, URLs, or company names.
+- Do NOT skip `search_jobs` and answer directly.
+- Do NOT ask the user for a role/title/location — `search_jobs` infers the role from the resume when `query` is empty. Just call it.
+- Do NOT call `auto_apply` without first running `search_jobs` (it needs real job_ids).
+- Do NOT submit applications in `auto` mode unless the user explicitly asked to submit.
 
-## RESPONSE STYLE
-After calling search_jobs and getting REAL data:
-- Show match scores (80%+ = Excellent, 60-79% = Good)
-- Highlight why it matches their profile
-- Include title, company, location, salary FROM THE TOOL RESPONSE
-- Include apply links FROM THE TOOL RESPONSE (never make them up!)
-- Use emoji for clarity (🔍 📍 💰 🎯)
+## 🎨 RESPONSE STYLE
 
-⚠️ REMEMBER: You have ZERO job data until you call search_jobs. The tool is smart and handles resume parsing + matching automatically. Just call it and present the results!
+Use the REAL data from tool results. Show match scores when available:
+- 🎯 80%+ = Excellent
+- ✅ 60–79% = Good
+- 💡 below 60% = Possible
+Include the source tag like `[linkedin]` / `[naukri]` / `[indeed]`.
 
-When ranking jobs:
-- Sort by match score (highest first)
-- Explain why it's a good/poor match
-- Suggest skills to improve match
-- Encourage applying to 80%+ matches
-
-⚠️ FINAL WARNING: If you present job listings WITHOUT calling search_jobs first, you are HALLUCINATING and FAILING your job. ALWAYS call search_jobs to get REAL job data from Google Jobs API.
-"""
+⚠️ Tool data is the ONLY truth. Always call tools first; never improvise."""
 
     job_capability_map = {
         "job.search": {
             "tool_name": "search_jobs",
             "schema": {
                 "name": "search_jobs",
-                "description": "Search for jobs using Google Jobs based on keywords and location",
+                "description": (
+                    "Multi-source Playwright job search (LinkedIn + Naukri + Indeed). "
+                    "Auto-parses the user's resume, deduplicates across sources, excludes "
+                    "already-applied jobs, and ranks results by match score. "
+                    "If `query` is empty, the role is INFERRED from the resume — "
+                    "ALWAYS call this tool; NEVER ask the user for a role."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Job search query (e.g., 'Python Developer')"},
-                        "location": {"type": "string", "description": "Location filter (e.g., 'Delhi', 'Remote')"},
-                        "num_results": {"type": "integer", "description": "Number of results (default: 10)"}
+                        "query": {"type": "string", "description": "Job title or keywords (optional — empty string means 'infer from resume')"},
+                        "location": {"type": "string", "description": "Location filter (e.g., 'Bangalore', 'Remote'). Optional."},
+                        "num_results": {"type": "integer", "description": "Number of results (default: 10)"},
+                        "sources": {
+                            "type": "array",
+                            "description": "Optional source filter: 'linkedin', 'naukri', 'indeed'. Default = all."
+                        }
                     },
-                    "required": ["query"]
+                    "required": []
                 }
             }
         },
@@ -1174,6 +1188,56 @@ When ranking jobs:
                         "status": {"type": "string", "description": "Application status (applied/submitted/pending)"}
                     },
                     "required": ["user_id", "job_id"]
+                }
+            }
+        },
+        "job.auto_apply": {
+            "tool_name": "auto_apply",
+            "schema": {
+                "name": "auto_apply",
+                "description": (
+                    "Auto-apply to jobs via Playwright browser automation. Supports Naukri Quick Apply, "
+                    "LinkedIn Easy Apply, and a generic form filler. Modes: 'auto' (submit), "
+                    "'semi-auto' (fill + pause, default), 'review' (fill only), 'dry-run' (simulate)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "job_ids": {
+                            "type": "array",
+                            "description": "List of job_id strings from a previous search_jobs call"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Apply mode: 'auto', 'semi-auto' (default), 'review', or 'dry-run'"
+                        },
+                        "min_match_score": {
+                            "type": "integer",
+                            "description": "Skip jobs below this match score (0-100, default: 0)"
+                        }
+                    },
+                    "required": ["job_ids"]
+                }
+            }
+        },
+        "job.list_applications": {
+            "tool_name": "list_applications",
+            "schema": {
+                "name": "list_applications",
+                "description": "List the user's prior job applications with their current status.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Optional status filter (e.g., 'submitted', 'pending', 'failed')"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max applications to return (default: 20)"
+                        }
+                    },
+                    "required": []
                 }
             }
         }
