@@ -1,0 +1,98 @@
+[
+  {
+    "job_id": "mock_001",
+    "title": "Senior Python Developer",
+    "company": "TechCorp India",
+    "location": "Delhi, India",
+    "description": "Looking for an experienced Python developer with FastAPI, Docker, and cloud experience. 3-5 years required.",
+    "posted_date": "2 days ago",
+    "url": "https://example.com/jobs/001",
+    "salary": "15-20 LPA",
+    "job_type": "Full-time",
+    "source": "Mock Data",
+    "skills_required": [
+      "Python",
+      "FastAPI",
+      "Docker",
+      "AWS",
+      "PostgreSQL"
+    ]
+  },
+  {
+    "job_id": "mock_002",
+    "title": "Backend Engineer",
+    "company": "StartupXYZ",
+    "location": "Delhi, India",
+    "description": "Build scalable backend services using Python, Node.js, and microservices. Experience with LLMs is a plus.",
+    "posted_date": "1 week ago",
+    "url": "https://example.com/jobs/002",
+    "salary": "12-18 LPA",
+    "job_type": "Full-time",
+    "source": "Mock Data",
+    "skills_required": [
+      "Python",
+      "Node.js",
+      "Microservices",
+      "MongoDB",
+      "LLM"
+    ]
+  },
+  {
+    "job_id": "mock_004",
+    "title": "Full Stack Developer",
+    "company": "ProductCo",
+    "location": "Delhi, India",
+    "description": "Join our team to build modern web applications. React, FastAPI, PostgreSQL. Fresh graduates welcome!",
+    "posted_date": "5 days ago",
+    "url": "https://example.com/jobs/004",
+    "salary": "8-12 LPA",
+    "job_type": "Full-time",
+    "source": "Mock Data",
+    "skills_required": [
+      "React",
+      "FastAPI",
+      "PostgreSQL",
+      "JavaScript",
+      "Python"
+    ]
+  },
+  {
+    "job_id": "mock_003",
+    "title": "ML Engineer",
+    "company": "AI Innovations",
+    "location": "Bangalore, India",
+    "description": "Work on cutting-edge machine learning projects. PyTorch, TensorFlow, NLP experience required. 2+ years.",
+    "posted_date": "3 days ago",
+    "url": "https://example.com/jobs/003",
+    "salary": "18-25 LPA",
+    "job_type": "Full-time",
+    "source": "Mock Data",
+    "skills_required": [
+      "Python",
+      "PyTorch",
+      "TensorFlow",
+      "NLP",
+      "Machine Learning"
+    ]
+  },
+  {
+    "job_id": "mock_005",
+    "title": "DevOps Engineer",
+    "company": "CloudTech Solutions",
+    "location": "Bangalore, India",
+    "description": "Manage cloud infrastructure using AWS, Kubernetes, Terraform. CI/CD pipeline expertise required. 3+ years.",
+    "posted_date": "1 day ago",
+    "url": "https://example.com/jobs/005",
+    "salary": "16-22 LPA",
+    "job_type": "Full-time",
+    "source": "Mock Data",
+    "skills_required": [
+      "AWS",
+      "Kubernetes",
+      "Docker",
+      "Terraform",
+      "CI/CD",
+      "Python"
+    ]
+  }
+]

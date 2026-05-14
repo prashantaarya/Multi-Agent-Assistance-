@@ -28,6 +28,11 @@ aiofiles>=23.0.0
 #   TELEGRAM_BOT_TOKEN=<your_bot_token>       (from @BotFather)
 #   TELEGRAM_DEFAULT_CHAT_ID=<your_chat_id>   (optional default target)
 
+# ── Resume & Job Search (optional for job agent) ──────────────────────────────
+PyPDF2>=3.0.0           # PDF parsing for resumes
+python-docx>=1.0.0      # DOCX parsing for resumes
+# serpapi>=0.1.5        # Optional: Google Jobs search (100 free/month, works in mock mode without)
+
 # ── Development / testing (optional) ─────────────────────────────────────────
 pytest>=7.0.0
 pytest-asyncio>=0.21.0

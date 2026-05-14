@@ -1,0 +1,67 @@
+Rahul Kumar
+Senior Python Developer
+
+Contact:
+Email: rahul.kumar@example.com
+Phone: +91-9876543210
+Location: Delhi, India
+LinkedIn: linkedin.com/in/rahulkumar
+GitHub: github.com/rahulkumar
+
+PROFESSIONAL SUMMARY
+Experienced software engineer with 4 years of expertise in backend development, API design, and cloud infrastructure. Skilled in Python, FastAPI, Docker, and AWS. Passionate about building scalable systems and working with LLMs and AI agents.
+
+TECHNICAL SKILLS
+Languages: Python, JavaScript, SQL, Bash
+Frameworks: FastAPI, Django, Flask, React, Node.js
+Databases: PostgreSQL, MongoDB, Redis
+Cloud & DevOps: AWS, Docker, Kubernetes, Terraform, CI/CD
+AI/ML: LLM, AutoGen, PyTorch, TensorFlow, NLP
+Tools: Git, Jenkins, GitHub Actions, Elasticsearch
+
+WORK EXPERIENCE
+
+Senior Backend Developer | TechCorp India | Jan 2022 - Present (2.5 years)
+- Built RESTful APIs using FastAPI serving 100K+ daily users
+- Designed microservices architecture with Docker and Kubernetes
+- Implemented LLM-powered chatbot using OpenAI and AutoGen
+- Reduced API response time by 40% through optimization
+- Mentored 3 junior developers
+
+Backend Engineer | StartupXYZ | July 2020 - Dec 2021 (1.5 years)
+- Developed backend services using Python Django and PostgreSQL
+- Integrated payment gateways and third-party APIs
+- Managed AWS infrastructure (EC2, S3, RDS, Lambda)
+- Implemented CI/CD pipelines with Jenkins and GitHub Actions
+- Worked in Agile/Scrum environment
+
+EDUCATION
+
+B.Tech in Computer Science
+Delhi Technological University | 2016 - 2020
+CGPA: 8.5/10
+
+PROJECTS
+
+J.A.R.V.I.S. Multi-Agent System (2026)
+- Built intelligent multi-agent system using AutoGen v0.4
+- Integrated Gmail, Calendar, Telegram, and API agents
+- Implemented ReAct pattern with LLM reasoning
+- Technologies: Python, FastAPI, Groq API, AutoGen
+
+E-Commerce Platform (2021)
+- Full-stack web application with React frontend and Django backend
+- Payment integration with Razorpay
+- Deployed on AWS with Docker
+- Technologies: React, Django, PostgreSQL, AWS
+
+CERTIFICATIONS
+- AWS Certified Solutions Architect - Associate (2023)
+- Machine Learning Specialization - Coursera (2022)
+
+LANGUAGES
+- English (Fluent)
+- Hindi (Native)
+
+INTERESTS
+Building AI agents, Open source contribution, Reading tech blogs

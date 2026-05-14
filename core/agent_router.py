@@ -103,39 +103,40 @@ class DomainAgent:
         
         return f"""{self.system_prompt}
 
-## YOUR TOOLS
+## YOUR AVAILABLE TOOLS
 {tools_doc}
 
-## HOW TO RESPOND
-You must respond in strict JSON format for EACH step:
+## HOW TO RESPOND TO USER REQUESTS
 
-To CALL A TOOL:
+When you receive a task, analyze it and respond in strict JSON format.
+
+**To call a tool** (use when you need data):
 {{
-  "thought": "Why I need to call this tool",
+  "thought": "I need to call [tool_name] to get [data]",
   "tool": "tool_name",
-  "tool_inputs": {{"param1": "value1", "param2": "value2"}},
+  "tool_inputs": {{"param1": "value1"}},
   "is_final": false
 }}
 
-To GIVE FINAL ANSWER (after tool calls or if you can answer directly):
+**To give final answer** (after getting data):
 {{
-  "thought": "Summarizing what I found",
+  "thought": "I have all the information needed",
   "tool": null,
   "tool_inputs": {{}},
   "is_final": true,
-  "answer": "Your complete, helpful answer to the user"
+  "answer": "Your helpful response to the user based on the data"
 }}
 
-## RULES
-1. Maximum {self.max_steps} steps - be efficient
-2. ⚠️ CRITICAL: NEVER make up or hallucinate data - ALWAYS call your tools to retrieve real information
-3. For data retrieval tasks (list, search, check, get), you MUST call the appropriate tool first
-4. Call tools one at a time, wait for results before next step
-5. ALWAYS provide a final answer (is_final: true) at the end
-6. Use the tool results to build a helpful, natural response
-7. For simple tasks (single tool call), call the tool then give final answer
-8. For complex tasks, chain multiple tool calls then synthesize
-7. Output ONLY valid JSON per step. No markdown, no extra text.
+## CRITICAL RULES
+1. You have maximum {self.max_steps} steps
+2. ⚠️ NEVER invent or hallucinate data - ALWAYS call tools to get real information
+3. For search/find/get/list requests → MUST call the appropriate tool first
+4. After calling a tool, you'll receive its output for the next step
+5. When you have enough information, give a final answer (is_final: true)
+6. Output ONLY valid JSON. No commentary, no markdown, just the JSON object.
+
+## YOUR JOB
+You will receive user requests as plain text. Analyze what they want, call the necessary tools to get real data, then provide a complete answer.
 """
 
     async def execute(self, task: str, request_id: str = None):
@@ -149,7 +150,8 @@ To GIVE FINAL ANSWER (after tool calls or if you can answer directly):
         """
         tracer = get_tracer(request_id)
         
-        context = f"USER TASK: {task}\n\nBegin by analyzing what you need to do:"
+        # Simple context - model will echo this, so keep it short
+        context = task.strip()
         action_history = []
         structured_data = None  # Track structured data from tool calls
         
@@ -175,6 +177,8 @@ To GIVE FINAL ANSWER (after tool calls or if you can answer directly):
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.info(f"[{self.name}] Building agent with prompt length: {len(agent_prompt)} chars")
+                logger.info(f"[{self.name}] System prompt preview (first 500 chars):\n{agent_prompt[:500]}")
+                logger.info(f"[{self.name}] System prompt end (last 300 chars):\n{agent_prompt[-300:]}")
                 
                 # Create agent using EXACT same pattern as working planner
                 agent = AssistantAgent(
@@ -203,6 +207,13 @@ To GIVE FINAL ANSWER (after tool calls or if you can answer directly):
                     logger.error(f"[{self.name}] Model client type: {type(self.model_client)}")
                     logger.error(f"[{self.name}] System message length: {len(agent_prompt)}")
                     logger.error(f"[{self.name}] Context sent: {context}")
+                
+                # FIX: Groq model echoes the input before responding - strip it!
+                # Example: Input "Find jobs" → Output "Find jobs{...JSON...}"
+                if buffer.startswith(context):
+                    buffer = buffer[len(context):].strip()
+                    logger.info(f"[{self.name}] Stripped echoed input, new length: {len(buffer)} chars")
+                
                 logger.info(f"[{self.name}] LLM raw response (first 800 chars):\n{buffer[:800]}")
                 
                 # Parse JSON response
@@ -264,17 +275,15 @@ To GIVE FINAL ANSWER (after tool calls or if you can answer directly):
                         "result": result_str[:2000],  # Truncate long results
                     })
                     
-                    # Build context for next iteration
-                    context = f"USER TASK: {task}\n\n"
-                    context += "PREVIOUS STEPS:\n"
+                    # SIMPLIFIED context for next iteration - more direct
+                    context = f"Task: {task}\n\nPrevious actions:\n"
                     for ah in action_history:
-                        context += f"\nStep {ah['step']}: Called {ah['tool']}\n"
-                        context += f"Result: {ah['result'][:500]}\n"
-                    context += f"\nContinue (step {step + 1}/{self.max_steps}). Decide next tool or give final answer:"
+                        context += f"- {ah['tool']}() returned: {ah['result'][:300]}\n"
+                    context += f"\nStep {step + 1}/{self.max_steps}: Decide next action or give final answer."
                 
                 elif tool_name:
-                    # Tool not found
-                    context += f"\n\nError: Tool '{tool_name}' not found. Available: {list(self.tools.keys())}\nTry again:"
+                    # Tool not found - simpler error message
+                    context += f"\n\nERROR: '{tool_name}' not available. Use one of: {', '.join(list(self.tools.keys())[:3])}"
             
             # Max steps reached - synthesize from what we have
             tracer.thought(self.name, "Max steps reached, synthesizing answer")

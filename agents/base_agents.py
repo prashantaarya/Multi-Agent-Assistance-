@@ -18,6 +18,8 @@ from .api_agent import APIAgent
 from .search_agent import SearchAgent
 from .telegram_agent import TelegramAgent
 from .calendar_agent import CalendarAgent
+from .resume_agent import ResumeAgent
+from .job_agent import JobAgent
 
 # Capability routing + typed contracts + tracing
 from core.schemas import Task, PlannerDecision, Result, Artifact, ExecutionMode, CapabilityCall
@@ -80,8 +82,8 @@ model_client = OpenAIChatCompletionClient(
     base_url="https://api.groq.com/openai/v1",
     model_info=model_info,
     create_config={
-        "temperature": 0.3,   # lower temperature for routing determinism
-        "max_tokens": 1000,
+        "temperature": 0.7,   # Increased from 0.3 to prevent echo behavior
+        "max_tokens": 2000,   # Increased from 1000 for longer responses
         "top_p": 0.9,
         "stop": ["TERMINATE"],
     },
@@ -98,6 +100,8 @@ api_agent      = APIAgent(name="api", model_client=model_client)
 search_agent   = SearchAgent(name="search", model_client=model_client)
 telegram_agent = TelegramAgent(name="telegram", model_client=model_client)
 calendar_agent = CalendarAgent(name="calendar", model_client=model_client)
+resume_agent   = ResumeAgent(name="resume", model_client=model_client)
+job_agent      = JobAgent(name="job", model_client=model_client)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # True Agent Architecture: Register domain agents
@@ -163,6 +167,8 @@ Your job: pick the RIGHT AGENT and describe the TASK clearly. The agent handles 
 | CODE | agent: "code" | run Python, calculate, execute code |
 | TELEGRAM | agent: "telegram" | send message, check Telegram, notify, alert via Telegram |
 | CALENDAR | agent: "calendar" | schedule meeting, check calendar, book appointment, am I free, cancel event |
+| RESUME | agent: "resume" | parse resume, review resume, analyze resume, my resume, show profile, update preferences |
+| JOBS | agent: "job" | search jobs, find jobs, rank jobs, apply, job listings, job match, find work, looking for job |
 | SMALL TALK | NO JSON | hi, hello, how are you, thanks (ONLY when no domain keyword is present) |
 
 ## EXAMPLES - WEATHER/NEWS/STOCKS → API AGENT
@@ -236,6 +242,54 @@ User: "cancel the team standup meeting"
 
 User: "add John to the project review meeting"
 {{"agent":"calendar","task":"Add John as attendee to project review meeting","capability":"calendar.manage_attendees","inputs":{{"event_identifier":"Project Review","action":"add","email":"john@company.com"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Manage attendees → calendar agent"}}
+
+## EXAMPLES - RESUME → RESUME AGENT
+
+User: "review my resume"
+{{"agent":"resume","task":"Auto-detect and parse user's resume","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"User wants resume review without specifying path → auto-detect resume"}}
+
+User: "parse my resume"
+{{"agent":"resume","task":"Auto-detect and parse resume","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Parse resume without explicit path → auto-detect"}}
+
+User: "show me my resume"
+{{"agent":"resume","task":"Auto-detect and display resume","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Display resume → auto-detect first"}}
+
+User: "analyze my resume"
+{{"agent":"resume","task":"Auto-detect and analyze resume","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Analyze resume → auto-detect first"}}
+
+User: "parse my resume from data/resumes/resume.pdf as john_doe"
+{{"agent":"resume","task":"Parse specific resume file","capability":"resume.parse","inputs":{{"user_id":"john_doe","file_path":"data/resumes/resume.pdf","use_llm":true}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Explicit file path given → use parse_resume"}}
+
+User: "show my profile"
+{{"agent":"resume","task":"Retrieve user's parsed resume profile","capability":"resume.get_profile","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Get profile → resume agent"}}
+
+User: "how well do I match this job description: Python developer with 3 years experience"
+{{"agent":"resume","task":"Analyze job fit for Python developer role","capability":"resume.analyze_fit","inputs":{{"user_id":"default_user","job_description":"Python developer with 3 years experience"}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Analyze job fit → resume agent"}}
+
+User: "update my job preferences for Delhi and Bangalore"
+{{"agent":"resume","task":"Update job search preferences","capability":"resume.update_preferences","inputs":{{"user_id":"default_user","preferences":{{"locations":["Delhi","Bangalore"],"roles":["Backend Developer"]}}}},"confidence":0.85,"fallback":null,"mode":"single","reasoning":"Update preferences → resume agent"}}
+## EXAMPLES - JOBS → JOB AGENT
+
+User: "find Python jobs in Delhi"
+{{"agent":"job","task":"Search for Python developer jobs in Delhi","capability":"job.search","inputs":{{"query":"Python Developer","location":"Delhi, India","num_results":10}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Job search → job agent"}}
+
+User: "rank these jobs for me"
+{{"agent":"job","task":"Rank job listings by match score","capability":"job.rank","inputs":{{"user_id":"default_user","min_score":50}},"confidence":0.9,"fallback":null,"mode":"single","reasoning":"Rank jobs → job agent"}}
+
+User: "show me details for job mock_001"
+{{"agent":"job","task":"Get full details for job mock_001","capability":"job.get_details","inputs":{{"job_id":"mock_001"}},"confidence":0.95,"fallback":null,"mode":"single","reasoning":"Job details → job agent"}}
+
+User: "I applied to that ML Engineer job"
+{{"agent":"job","task":"Track application to ML Engineer position","capability":"job.track_application","inputs":{{"user_id":"default_user","job_id":"mock_003","status":"applied"}},"confidence":0.85,"fallback":null,"mode":"single","reasoning":"Log application → job agent"}}
+
+User: "review my resume and find relevant jobs"
+{{"agent":"resume","task":"Auto-detect resume then search for matching jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.95,"fallback":"job","mode":"react","reasoning":"Multi-step: parse resume → find matching jobs (use react mode)"}}
+
+User: "find AI Engineer jobs for me"
+{{"agent":"resume","task":"Auto-detect resume then search AI Engineer jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.9,"fallback":"job","mode":"react","reasoning":"User wants jobs based on resume → auto-detect first, then search"}}
+
+User: "help me find a new job"
+{{"agent":"resume","task":"Auto-detect resume and find relevant jobs","capability":"resume.auto_detect","inputs":{{"user_id":"default_user"}},"confidence":0.9,"fallback":"job","mode":"react","reasoning":"Job search based on resume → parse first, then search and rank"}}
 
 ## EXAMPLES - CODE → CODE AGENT
 

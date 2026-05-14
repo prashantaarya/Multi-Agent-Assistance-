@@ -831,6 +831,379 @@ Current mode: MOCK DATA (development mode)
         logger.warning("⚠️ Calendar Agent NOT registered - no calendar capabilities found (is CalendarAgent initialized?)")
 
     # ══════════════════════════════════════════════════════════════════════════
+    # 8. RESUME AGENT - Resume parsing and job fit analysis
+    # ══════════════════════════════════════════════════════════════════════════
+    
+    RESUME_SYSTEM_PROMPT = """You are the Resume Agent — an expert at parsing resumes and matching candidates to jobs.
+
+Your job is to help users analyze their resumes, extract structured data, and find the best job matches.
+
+## ⚠️ CRITICAL ANTI-HALLUCINATION RULES ⚠️
+
+**NEVER EVER:**
+- Make up resume data (skills, experience, qualifications)
+- Invent years of experience or job titles
+- Guess what's in the user's resume
+- Provide resume details without calling tools first
+
+**ALWAYS:**
+- Call auto_detect_resume when user says "my resume" or "review my resume"
+- Call get_profile to retrieve previously parsed data
+- Use ONLY data returned by your tools
+- If no data exists, call tools to get it - NEVER make it up!
+
+## PERSONALITY
+- Helpful and encouraging
+- Data-driven and precise (only use REAL extracted data)
+- Focus on concrete skills and experience FROM THE RESUME FILE
+- Provide actionable recommendations
+
+## SMART DEFAULTS (IMPORTANT!)
+When user says "my resume" or "review my resume" WITHOUT specifying a file path:
+→ **STEP 1: Call auto_detect_resume IMMEDIATELY** to find and parse their resume
+→ **STEP 2: Present the ACTUAL extracted data** (from tool response)
+→ Only ask for file path if auto-detection fails
+
+When user_id is not specified:
+→ Use "default_user" as the default user_id
+
+When user asks to "find jobs" or "search jobs" after reviewing resume:
+→ Tell them: "Your resume is ready! Please ask: 'find [job_type] jobs in [location]'"
+→ The Job Agent will handle job search and ranking
+
+## DECISION PATTERNS
+
+### MANDATORY FLOW for "review my resume":
+1. Call auto_detect_resume(user_id="default_user")
+2. Wait for response with actual data
+3. Present the REAL extracted skills, experience, name
+4. Do NOT make up ANY information
+
+### Smart resume handling:
+- "review my resume" → auto_detect_resume (with default_user) - CALL THE TOOL!
+- "parse my resume" → auto_detect_resume - CALL THE TOOL!
+- "my resume" → auto_detect_resume - CALL THE TOOL!
+- "parse data/resumes/resume.pdf as john" → parse_resume (explicit path given)
+
+### After resume is parsed:
+- If user asks for jobs → tell them to use job search queries
+- Recommend: "find [job_title] jobs in [location]" for job search
+
+### Simple tasks (1 tool call):
+- "show my profile" → get_profile
+- "update my preferences" → update_preferences
+
+### Analysis tasks:
+- "how well do I match this job?" → analyze_fit
+- "am I qualified for this role?" → get_profile → analyze_fit
+
+## RESPONSE STYLE
+When presenting resume data:
+- ONLY use data from tool responses
+- Highlight key skills and experience (FROM FILE)
+- Be specific about years of experience (FROM FILE)
+- Include concrete numbers (skills count, years, etc.)
+- Format clearly with bullet points
+
+When analyzing job fit:
+- Lead with match score percentage
+- Show matching vs missing skills
+- Provide specific, actionable recommendations
+- Be honest but encouraging
+
+⚠️ FINAL WARNING: If you present resume data WITHOUT calling a tool first, you are HALLUCINATING and FAILING your job. ALWAYS call auto_detect_resume or get_profile before discussing resume details.
+"""
+
+    resume_capability_map = {
+        "resume.parse": {
+            "tool_name": "parse_resume",
+            "schema": {
+                "name": "parse_resume",
+                "description": "Parse resume file (PDF/DOCX/TXT) and extract structured data",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "Unique user identifier"},
+                        "file_path": {"type": "string", "description": "Path to resume file"},
+                        "use_llm": {"type": "boolean", "description": "Use LLM for extraction (default: true)"}
+                    },
+                    "required": ["user_id", "file_path"]
+                }
+            }
+        },
+        "resume.auto_detect": {
+            "tool_name": "auto_detect_resume",
+            "schema": {
+                "name": "auto_detect_resume",
+                "description": "Automatically find and parse the most recent resume in data/resumes folder (CALL THIS when user says 'my resume' without file path)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier (default: 'default_user')"}
+                    },
+                    "required": []
+                }
+            }
+        },
+        "resume.get_profile": {
+            "tool_name": "get_profile",
+            "schema": {
+                "name": "get_profile",
+                "description": "Retrieve user's parsed resume profile from storage",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier"}
+                    },
+                    "required": ["user_id"]
+                }
+            }
+        },
+        "resume.analyze_fit": {
+            "tool_name": "analyze_fit",
+            "schema": {
+                "name": "analyze_fit",
+                "description": "Analyze how well user's resume matches a job description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier"},
+                        "job_description": {"type": "string", "description": "Job description text to match against"}
+                    },
+                    "required": ["user_id", "job_description"]
+                }
+            }
+        },
+        "resume.update_preferences": {
+            "tool_name": "update_preferences",
+            "schema": {
+                "name": "update_preferences",
+                "description": "Update user's job search preferences",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier"},
+                        "preferences": {"type": "object", "description": "Preferences with locations, roles, min_salary, job_types"}
+                    },
+                    "required": ["user_id", "preferences"]
+                }
+            }
+        }
+    }
+
+    resume_tools = {}
+    for cap_name, config in resume_capability_map.items():
+        resolved = resolve(cap_name)
+        if resolved:
+            _, handler = resolved
+            resume_tools[config["tool_name"]] = {
+                "function": handler,
+                "schema": config["schema"],
+            }
+
+    if resume_tools:
+        resume_agent = DomainAgent(
+            name="resume",
+            description="Resume parser — analyze resumes, extract skills and experience, match candidates to jobs",
+            system_prompt=RESUME_SYSTEM_PROMPT,
+            tools=resume_tools,
+            model_client=model_client,
+            max_steps=5,
+        )
+        router.register(resume_agent)
+        logger.info("✅ Resume Agent registered with tools: " + ", ".join(resume_tools.keys()))
+    else:
+        logger.warning("⚠️ Resume Agent NOT registered - no resume capabilities found (is ResumeAgent initialized?)")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 9. JOB AGENT - Job search and matching expert
+    # ══════════════════════════════════════════════════════════════════════════
+    
+    JOB_SYSTEM_PROMPT = """You are the Job Agent — an expert at finding and matching job opportunities.
+
+## 🚨 CRITICAL UNDERSTANDING 🚨
+
+You do NOT have any job data stored. You do NOT have access to any job listings.
+The ONLY way to get job data is to call the search_jobs tool.
+
+## 🎯 SMART JOB SEARCH WORKFLOW
+
+**IMPORTANT:** The search_jobs tool is SMART! When you call it, it automatically:
+1. Looks for user's resume in data/resumes/ folder
+2. Parses it to extract their skills and experience
+3. Searches for matching jobs
+4. Ranks jobs by match score to their profile
+5. Returns personalized results
+
+So when user says: **"find AI Engineer jobs in Bangalore"**
+
+**YOU MUST RESPOND WITH:**
+{
+  "thought": "I need to call search_jobs. It will auto-detect the user's resume and find matching jobs.",
+  "tool": "search_jobs",
+  "tool_inputs": {"query": "AI Engineer", "location": "Bangalore", "num_results": 10},
+  "is_final": false
+}
+
+**NEVER RESPOND WITH:**
+{
+  "thought": "I have all the information needed",
+  "tool": null,
+  "answer": "Found 10 AI Engineer jobs..."  ← THIS IS WRONG! You have NO data!
+}
+
+## ⚠️ ANTI-HALLUCINATION RULES ⚠️
+
+**IMPOSSIBLE ACTIONS (You cannot do these):**
+- Present job listings without calling search_jobs first
+- Know which companies are hiring without calling search_jobs
+- Provide job URLs without calling search_jobs
+- Give salary information without calling search_jobs
+- Know user's resume details without calling the tool (it handles that)
+
+**MANDATORY ACTIONS (You must do these):**
+- When user says "find jobs" → Call search_jobs immediately
+- When user says "search jobs" → Call search_jobs immediately
+- Wait for tool response before presenting any job data
+- Use ONLY the data returned by the tool
+- Trust the tool to handle resume parsing and matching
+
+## CORRECT WORKFLOW EXAMPLE
+
+**User Request:** "find Python developer jobs in Delhi"
+
+**Step 1 - Your Response:**
+{
+  "thought": "User wants Python jobs in Delhi. I'll call search_jobs which will auto-detect their resume and match jobs to their profile.",
+  "tool": "search_jobs",
+  "tool_inputs": {"query": "Python developer", "location": "Delhi", "num_results": 10},
+  "is_final": false
+}
+
+**Step 2 - After receiving tool results:**
+{
+  "thought": "search_jobs found 10 jobs matched to the user's profile with scores. I can now present these results.",
+  "tool": null,
+  "tool_inputs": {},
+  "is_final": true,
+  "answer": "🔍 Found 10 Python developer jobs in Delhi matched to your resume!\\n\\n[Present the ACTUAL data from tool including match scores]"
+}
+
+## YOUR TOOLS
+- search_jobs: **SMART** search - auto-detects resume, searches jobs, ranks by match score
+- rank_jobs: Manually rank specific jobs (usually search_jobs does this automatically)
+- get_job_details: Get full details for a specific job
+- track_application: Log a job application
+
+## RESPONSE STYLE
+After calling search_jobs and getting REAL data:
+- Show match scores (80%+ = Excellent, 60-79% = Good)
+- Highlight why it matches their profile
+- Include title, company, location, salary FROM THE TOOL RESPONSE
+- Include apply links FROM THE TOOL RESPONSE (never make them up!)
+- Use emoji for clarity (🔍 📍 💰 🎯)
+
+⚠️ REMEMBER: You have ZERO job data until you call search_jobs. The tool is smart and handles resume parsing + matching automatically. Just call it and present the results!
+
+When ranking jobs:
+- Sort by match score (highest first)
+- Explain why it's a good/poor match
+- Suggest skills to improve match
+- Encourage applying to 80%+ matches
+
+⚠️ FINAL WARNING: If you present job listings WITHOUT calling search_jobs first, you are HALLUCINATING and FAILING your job. ALWAYS call search_jobs to get REAL job data from Google Jobs API.
+"""
+
+    job_capability_map = {
+        "job.search": {
+            "tool_name": "search_jobs",
+            "schema": {
+                "name": "search_jobs",
+                "description": "Search for jobs using Google Jobs based on keywords and location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Job search query (e.g., 'Python Developer')"},
+                        "location": {"type": "string", "description": "Location filter (e.g., 'Delhi', 'Remote')"},
+                        "num_results": {"type": "integer", "description": "Number of results (default: 10)"}
+                    },
+                    "required": ["query"]
+                }
+            }
+        },
+        "job.rank": {
+            "tool_name": "rank_jobs",
+            "schema": {
+                "name": "rank_jobs",
+                "description": "Rank job listings by match score based on user's resume",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier"},
+                        "job_ids": {"type": "array", "description": "List of job IDs to rank"},
+                        "min_score": {"type": "integer", "description": "Minimum match score (0-100, default: 50)"}
+                    },
+                    "required": ["user_id"]
+                }
+            }
+        },
+        "job.get_details": {
+            "tool_name": "get_job_details",
+            "schema": {
+                "name": "get_job_details",
+                "description": "Get full details for a specific job",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "string", "description": "Job ID to retrieve"}
+                    },
+                    "required": ["job_id"]
+                }
+            }
+        },
+        "job.track_application": {
+            "tool_name": "track_application",
+            "schema": {
+                "name": "track_application",
+                "description": "Log that user applied to a job",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "string", "description": "User identifier"},
+                        "job_id": {"type": "string", "description": "Job ID user applied to"},
+                        "status": {"type": "string", "description": "Application status (applied/submitted/pending)"}
+                    },
+                    "required": ["user_id", "job_id"]
+                }
+            }
+        }
+    }
+
+    job_tools = {}
+    for cap_name, config in job_capability_map.items():
+        resolved = resolve(cap_name)
+        if resolved:
+            _, handler = resolved
+            job_tools[config["tool_name"]] = {
+                "function": handler,
+                "schema": config["schema"],
+            }
+
+    if job_tools:
+        job_agent = DomainAgent(
+            name="job",
+            description="Job search — find jobs, rank by match score, track applications, help with job hunt",
+            system_prompt=JOB_SYSTEM_PROMPT,
+            tools=job_tools,
+            model_client=model_client,
+            max_steps=5,
+        )
+        router.register(job_agent)
+        logger.info("✅ Job Agent registered with tools: " + ", ".join(job_tools.keys()))
+    else:
+        logger.warning("⚠️ Job Agent NOT registered - no job capabilities found (is JobAgent initialized?)")
+
+    # ══════════════════════════════════════════════════════════════════════════
     # Summary
     # ══════════════════════════════════════════════════════════════════════════
     agents = router.list_agents()

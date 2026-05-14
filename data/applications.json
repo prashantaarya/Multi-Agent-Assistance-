@@ -1,0 +1,20 @@
+[
+  {
+    "application_id": "app_001",
+    "user_id": "test_user",
+    "job_id": "mock_001",
+    "job_title": "Senior Python Developer",
+    "company": "TechCorp India",
+    "applied_at": "2026-04-20T12:01:43.912074",
+    "status": "applied"
+  },
+  {
+    "application_id": "app_002",
+    "user_id": "workflow_user",
+    "job_id": "mock_001",
+    "job_title": "Senior Python Developer",
+    "company": "TechCorp India",
+    "applied_at": "2026-04-20T12:01:43.952214",
+    "status": "applied"
+  }
+]

@@ -1,0 +1,164 @@
+{
+  "test_user": {
+    "personal": {
+      "name": "Rahul Kumar",
+      "email": "rahul.kumar@example.com",
+      "phone": "+91-9876543210",
+      "location": "Not specified",
+      "linkedin": null,
+      "github": null
+    },
+    "summary": "Professional with experience in software development",
+    "skills": [
+      "Python",
+      "Java",
+      "JavaScript",
+      "SQL",
+      "React",
+      "Node.js",
+      "FastAPI",
+      "Django",
+      "Flask",
+      "PostgreSQL",
+      "MongoDB",
+      "Docker",
+      "Kubernetes",
+      "AWS",
+      "Git"
+    ],
+    "experience": [
+      {
+        "company": "Previous Company",
+        "role": "Software Developer",
+        "duration": "2020 - Present",
+        "years": 3,
+        "domain": "Software Development",
+        "description": "Worked on various projects"
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor's Degree",
+        "field": "Computer Science",
+        "institution": "University",
+        "year": 2020,
+        "grade": "N/A"
+      }
+    ],
+    "projects": [],
+    "certifications": [],
+    "languages": [
+      "English"
+    ],
+    "user_id": "test_user",
+    "updated_at": "2026-04-20T00:00:00Z"
+  },
+  "workflow_user": {
+    "personal": {
+      "name": "Rahul Kumar",
+      "email": "rahul.kumar@example.com",
+      "phone": "+91-9876543210",
+      "location": "Not specified",
+      "linkedin": null,
+      "github": null
+    },
+    "summary": "Professional with experience in software development",
+    "skills": [
+      "Python",
+      "Java",
+      "JavaScript",
+      "SQL",
+      "React",
+      "Node.js",
+      "FastAPI",
+      "Django",
+      "Flask",
+      "PostgreSQL",
+      "MongoDB",
+      "Docker",
+      "Kubernetes",
+      "AWS",
+      "Git"
+    ],
+    "experience": [
+      {
+        "company": "Previous Company",
+        "role": "Software Developer",
+        "duration": "2020 - Present",
+        "years": 3,
+        "domain": "Software Development",
+        "description": "Worked on various projects"
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor's Degree",
+        "field": "Computer Science",
+        "institution": "University",
+        "year": 2020,
+        "grade": "N/A"
+      }
+    ],
+    "projects": [],
+    "certifications": [],
+    "languages": [
+      "English"
+    ],
+    "user_id": "workflow_user",
+    "updated_at": "2026-04-20T00:00:00Z"
+  },
+  "default_user": {
+    "personal": {
+      "name": "Rahul Kumar",
+      "email": "rahul.kumar@example.com",
+      "phone": "+91-9876543210",
+      "location": "Not specified",
+      "linkedin": null,
+      "github": null
+    },
+    "summary": "Professional with experience in software development",
+    "skills": [
+      "Python",
+      "Java",
+      "JavaScript",
+      "SQL",
+      "React",
+      "Node.js",
+      "FastAPI",
+      "Django",
+      "Flask",
+      "PostgreSQL",
+      "MongoDB",
+      "Docker",
+      "Kubernetes",
+      "AWS",
+      "Git"
+    ],
+    "experience": [
+      {
+        "company": "Previous Company",
+        "role": "Software Developer",
+        "duration": "2020 - Present",
+        "years": 3,
+        "domain": "Software Development",
+        "description": "Worked on various projects"
+      }
+    ],
+    "education": [
+      {
+        "degree": "Bachelor's Degree",
+        "field": "Computer Science",
+        "institution": "University",
+        "year": 2020,
+        "grade": "N/A"
+      }
+    ],
+    "projects": [],
+    "certifications": [],
+    "languages": [
+      "English"
+    ],
+    "user_id": "default_user",
+    "updated_at": "2026-04-20T00:00:00Z"
+  }
+}
