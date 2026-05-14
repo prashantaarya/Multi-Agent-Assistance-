@@ -209,13 +209,7 @@ __marimo__/
 # ── JARVIS project-specific ───────────────────────────────────────────────────
 
 # Documentation files (keep only README.md in repo)
-ARCHITECTURE_GUIDE.md
-PROJECT_STRUCTURE.md
-QUICK_REFERENCE.md
-LEARNING_GUIDE.md
-VISUAL_WORKFLOW_GUIDE.md
-DOCUMENTATION_INDEX.md
-COMPLETE_SUMMARY.md
+
 
 # API keys — already covered by .env above, but also catch local variants
 .env.local
